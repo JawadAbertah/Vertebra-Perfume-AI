@@ -33,6 +33,12 @@ SUGGESTIONS = [
     "ما مدة ثبات عطر عود الملكي؟",
 ]
 
+# Custom chat avatars — emoji instead of default Streamlit icons
+AVATARS: dict[str, str] = {
+    "user":      "👤",   # clean human silhouette
+    "assistant": "✨",   # luxury sparkle for the AI agent
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CSS — RTL fix, Tajawal, dark luxury, hide ALL sidebar artifacts
 # ─────────────────────────────────────────────────────────────────────────────
@@ -298,9 +304,32 @@ col_chat, col_suggest = st.columns([3, 1])
 with col_suggest:
     st.markdown(
         """
-        <div class="suggestions-panel">
-            <div class="suggestions-title">✨ أسئلة مقترحة</div>
-            <div class="suggestions-hint">اضغط على أي سؤال لإرساله مباشرةً</div>
+        <div style='margin-bottom:1rem; direction:rtl;'>
+            <div style='
+                font-family: Tajawal, sans-serif;
+                font-size: 1.15rem;
+                font-weight: 700;
+                text-align: right;
+                background: linear-gradient(100deg, #B89947 0%, #D4AF37 45%, #F5DC6E 70%, #D4AF37 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                letter-spacing: 0.5px;
+                margin-bottom: 0.4rem;
+            '>✨ أسئلة مقترحة</div>
+            <div style='
+                height: 1.5px;
+                background: linear-gradient(90deg, transparent 0%, #D4AF37 40%, #F5DC6E 60%, transparent 100%);
+                margin-bottom: 0.5rem;
+                border-radius: 2px;
+            '></div>
+            <div style='
+                color: #4a4a4a;
+                font-family: Tajawal, sans-serif;
+                font-size: 0.78rem;
+                text-align: right;
+                font-style: italic;
+            '>اضغط على أي سؤال لإرساله مباشرةً</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -310,17 +339,10 @@ with col_suggest:
             st.session_state.pending_message = question
             st.rerun()
 
-    st.markdown(
-        f"<div style='text-align:center; margin-top:1rem; font-family:Tajawal,sans-serif;'>"
-        f"<span style='color:#333; font-size:0.75rem;'>v3.0 · مدعوم بالذكاء الاصطناعي</span>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-
 # ── Left column: Chat history ─────────────────────────────────────────────────
 with col_chat:
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
+        with st.chat_message(msg["role"], avatar=AVATARS[msg["role"]]):
             st.markdown(msg["content"])
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -348,10 +370,10 @@ if user_input:
 
     # Re-enter col_chat to append new messages below existing history
     with col_chat:
-        with st.chat_message("user"):
+        with st.chat_message("user", avatar=AVATARS["user"]):
             st.markdown(user_input)
 
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar=AVATARS["assistant"]):
             with st.spinner("جارٍ التفكير... 💭"):
                 try:
                     response = requests.post(
@@ -383,3 +405,31 @@ if user_input:
             if reply:
                 st.markdown(reply)
                 st.session_state.messages.append({"role": "assistant", "content": reply})
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Full-width page watermark footer
+# ─────────────────────────────────────────────────────────────────────────────
+st.markdown(
+    """
+    <div style='
+        text-align: center;
+        padding: 1.8rem 0 0.6rem;
+        font-family: Tajawal, sans-serif;
+        direction: rtl;
+    '>
+        <div style='
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #B8994740, transparent);
+            margin-bottom: 0.9rem;
+        '></div>
+        <span style='
+            color: #B89947;
+            font-size: 0.8rem;
+            letter-spacing: 1.5px;
+            font-weight: 400;
+            opacity: 0.75;
+        '>⚡ مدعوم بأنظمة AAA الذكية</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)

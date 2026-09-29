@@ -4,3 +4,5 @@ motor
 langchain
 langchain-google-genai
 python-dotenv
+streamlit
+requests

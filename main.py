@@ -24,7 +24,6 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from pydantic import BaseModel, Field
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
-from mangum import Mangum
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Environment & constants
@@ -182,7 +181,7 @@ app = FastAPI(title="AAA Luxury Perfume Bot API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -227,5 +226,3 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
  
- 
-handler = Mangum(app)

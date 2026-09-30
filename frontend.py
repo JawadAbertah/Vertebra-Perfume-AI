@@ -1,435 +1,641 @@
 """
-frontend.py — AAA Luxury Perfume Bot | SaaS Demo UI v3.0
-Dark luxury Arabic RTL chat interface powered by Streamlit.
-Layout: st.columns([3, 1]) — no st.sidebar.
+frontend.py — Vertebra AI | Sendbird-Style Floating Chat Widget v5.0
+Exact replication of Sendbird compact widget UI.
 Connects to FastAPI backend at http://127.0.0.1:8000/chat
 """
+
+import base64
+import re
+from datetime import datetime
+from pathlib import Path
 
 import requests
 import streamlit as st
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Page config — no sidebar
+# 1. Page Config
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="AAA Perfume | نور",
-    page_icon="🌹",
-    layout="wide",
+    page_title="Vertebra AI",
+    page_icon="✨",
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Constants
+# 2. Brand Constants  (exact purple from Vertebra.jfif: #B021B1)
 # ─────────────────────────────────────────────────────────────────────────────
 API_URL     = "http://127.0.0.1:8000/chat"
 API_TIMEOUT = 30
-GOLD        = "#D4AF37"
-
-SUGGESTIONS = [
-    "ما هي العطور المتاحة لديكم؟",
-    "ما سعر عطر نفحة الذهب؟",
-    "ما هي مكونات عطر مسك الجنة؟",
-    "كم يستغرق التوصيل إلى الرياض؟",
-    "هل الشحن مجاني عند الطلب؟",
-    "ما مدة ثبات عطر عود الملكي؟",
-]
-
-# Custom chat avatars — emoji instead of default Streamlit icons
-AVATARS: dict[str, str] = {
-    "user":      "👤",   # clean human silhouette
-    "assistant": "✨",   # luxury sparkle for the AI agent
-}
+PURPLE      = "#B021B1"
+PURPLE_DARK = "#99189A"
+LOGO_PATH   = Path("Vertebra.jfif")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CSS — RTL fix, Tajawal, dark luxury, hide ALL sidebar artifacts
+# 3. Base64 Image Loader — standard library only, zero Streamlit internals
+# ─────────────────────────────────────────────────────────────────────────────
+def get_base64_image(path: Path) -> str:
+    """Read image bytes and return a data:image/jpeg;base64,... URI string."""
+    if path.exists():
+        encoded = base64.b64encode(path.read_bytes()).decode("utf-8")
+        return f"data:image/jpeg;base64,{encoded}"
+    return ""
+
+LOGO_URI: str = get_base64_image(LOGO_PATH)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. Global CSS — Floating Widget, Sendbird Reference
 # ─────────────────────────────────────────────────────────────────────────────
 st.markdown(
-    """
+    f"""
     <style>
-    /* ── Google Font: Tajawal ─────────────────────────────────────────────── */
-    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700&display=swap');
+    /* ── Tajawal Arabic Font ──────────────────────────────────────────────── */
+    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800&display=swap');
 
-    /* ── RTL Fix ──────────────────────────────────────────────────────────── */
-    html, body, [class*="css"], .stApp {
-        font-family: 'Tajawal', sans-serif !important;
+    /* ── Grey page that sits behind the floating widget ──────────────────── */
+    html, body, .stApp {{
+        background-color: #DEDEDE !important;
+        font-family: 'Tajawal', -apple-system, BlinkMacSystemFont, sans-serif !important;
         direction: rtl !important;
-        text-align: right !important;
-    }
-    p, span, div, label, button, h1, h2, h3, h4, h5, h6, li, a {
+    }}
+
+    /* ── THE FLOATING WIDGET CARD (400 px, white, rounded, shadow) ───────── */
+    .block-container {{
+        max-width: 400px !important;
+        width: 400px !important;
+        margin: 28px auto 0 !important;
+        padding: 0 0 130px 0 !important;   /* bottom padding = input bar height */
+        background: #FFFFFF !important;
+        border-radius: 16px !important;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.16) !important;
+        overflow: visible !important;      /* allow fixed input to overlap cleanly */
+    }}
+
+    /* ── Column gaps: none inside the widget ─────────────────────────────── */
+    [data-testid="stHorizontalBlock"] {{
+        gap: 0 !important;
+        align-items: stretch !important;
+    }}
+    [data-testid="column"] {{
+        padding: 0 !important;
+    }}
+
+    /* ── Chat input bar — fixed, centered, matches widget width ──────────── */
+    div[data-testid="stBottom"] {{
+        position: fixed !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        width: 400px !important;
+        max-width: 400px !important;
+        bottom: 0 !important;
+        background: #FFFFFF !important;
+        border-top: 1px solid #EEEEEE !important;
+        padding: 10px 14px 14px !important;
+        border-radius: 0 0 16px 16px !important;
+        z-index: 9999 !important;
+        box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06) !important;
+    }}
+    div[data-testid="stBottom"] > div {{
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+    }}
+
+    /* ── Hide ALL default Streamlit chrome ───────────────────────────────── */
+    #MainMenu, header, footer,
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"],
+    [data-testid="stStatusWidget"],
+    section[data-testid="stSidebar"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"] {{
+        display: none !important;
+    }}
+
+    /* ── RTL: prevent vertical text stacking ─────────────────────────────── */
+    p, span, div, label, button, h1, h2, h3, h4, h5, h6 {{
         writing-mode: horizontal-tb !important;
         text-orientation: mixed !important;
         direction: rtl !important;
-        text-align: right !important;
         font-family: 'Tajawal', sans-serif !important;
-    }
-    textarea, input {
-        writing-mode: horizontal-tb !important;
-        unicode-bidi: embed !important;
-        direction: rtl !important;
-        text-align: right !important;
+    }}
+
+    /* ─── HEADER ─────────────────────────────────────────────────────────── */
+    /* Header brand column: white bg, bottom border */
+    .st-key-btn_refresh,
+    .st-key-btn_exit {{
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding-top: 0 !important;
+    }}
+
+    /* ↻ Refresh button */
+    .st-key-btn_refresh button {{
+        width: 28px !important;
+        height: 28px !important;
+        min-height: 28px !important;
+        border-radius: 50% !important;
+        background: transparent !important;
+        border: none !important;
+        color: #888888 !important;
+        font-size: 1rem !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        margin-top: 16px !important;
+        transition: all 0.25s ease !important;
+    }}
+    .st-key-btn_refresh button:hover {{
+        background: #F5F0FF !important;
+        color: {PURPLE} !important;
+        transform: rotate(180deg) !important;
+    }}
+
+    /* ✕ Exit button */
+    .st-key-btn_exit button {{
+        width: 28px !important;
+        height: 28px !important;
+        min-height: 28px !important;
+        border-radius: 50% !important;
+        background: transparent !important;
+        border: none !important;
+        color: #888888 !important;
+        font-size: 0.85rem !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        margin-top: 16px !important;
+        transition: all 0.2s ease !important;
+    }}
+    .st-key-btn_exit button:hover {{
+        background: #FEF2F2 !important;
+        color: #EF4444 !important;
+    }}
+
+    /* ─── MESSAGE BUBBLES ────────────────────────────────────────────────── */
+    /* Bot bubble: light grey bg, dark grey text (high contrast) */
+    .bot-row {{
+        display: flex;
+        align-items: flex-end;
+        gap: 7px;
+        justify-content: flex-start;
+        margin-bottom: 10px;
+        padding: 0 14px;
+        direction: rtl;
+    }}
+    .bot-avt {{
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex-shrink: 0;
+        border: 1px solid #F0ABFC;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }}
+    .bot-avt-fallback {{
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: #F3F3F5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.9rem;
+        flex-shrink: 0;
+    }}
+    .bot-bubble {{
+        background: #F3F3F5 !important;
+        color: #333333 !important;
+        border-radius: 16px 16px 16px 4px !important;
+        padding: 9px 13px !important;
+        max-width: 286px !important;
+        font-size: 0.87rem !important;
+        line-height: 1.65 !important;
         font-family: 'Tajawal', sans-serif !important;
-    }
-
-    /* ── Page & block background ──────────────────────────────────────────── */
-    .stApp {
-        background-color: #0d0d0d !important;
-    }
-    .block-container {
-        padding-top: 0.5rem !important;
-        padding-bottom: 0 !important;
-        max-width: 100% !important;
-    }
-
-    /* ── NUKE the sidebar and its collapsed toggle line completely ─────────── */
-    section[data-testid="stSidebar"]              { display: none !important; }
-    [data-testid="stSidebarCollapsedControl"]      { display: none !important; }
-    [data-testid="collapsedControl"]               { display: none !important; }
-    button[kind="header"]                          { display: none !important; }
-
-    /* ── Column gap & borders ─────────────────────────────────────────────── */
-    [data-testid="stColumns"] {
-        gap: 1rem !important;
-        align-items: flex-start !important;
-    }
-    /* Remove any default column dividers */
-    [data-testid="stColumns"] > div::before,
-    [data-testid="stColumns"] > div::after {
-        display: none !important;
-    }
-
-    /* ── Suggestions panel (right column) ────────────────────────────────── */
-    .suggestions-panel {
-        background: #111111;
-        border: 1px solid #D4AF3722;
-        border-radius: 14px;
-        padding: 1rem 0.75rem 1.2rem;
-        position: sticky;
-        top: 1rem;
-    }
-    .suggestions-title {
-        color: #D4AF37;
-        font-family: 'Tajawal', sans-serif;
-        font-size: 1.1rem;
-        font-weight: 700;
-        text-align: right;
-        margin-bottom: 0.2rem;
-    }
-    .suggestions-hint {
-        color: #555;
-        font-family: 'Tajawal', sans-serif;
-        font-size: 0.8rem;
-        text-align: right;
-        margin-bottom: 0.8rem;
-        border-bottom: 1px solid #D4AF3718;
-        padding-bottom: 0.6rem;
-    }
-
-    /* ── Suggestion buttons ───────────────────────────────────────────────── */
-    .stButton > button {
-        width: 100% !important;
-        background: linear-gradient(135deg, #1a1500 0%, #252000 100%) !important;
-        color: #D4AF37 !important;
-        border: 1px solid #D4AF3745 !important;
-        border-radius: 10px !important;
-        padding: 0.55rem 0.9rem !important;
-        font-family: 'Tajawal', sans-serif !important;
-        font-size: 0.88rem !important;
         font-weight: 500 !important;
         text-align: right !important;
         direction: rtl !important;
-        writing-mode: horizontal-tb !important;
-        transition: all 0.2s ease !important;
-        margin-bottom: 0.45rem !important;
-        cursor: pointer !important;
-        white-space: normal !important;
+        word-wrap: break-word !important;
+    }}
+    .bot-ts {{
+        font-size: 0.62rem !important;
+        color: #9CA3AF !important;
+        margin-top: 3px !important;
+        direction: ltr !important;
+        text-align: left !important;
+        font-family: -apple-system, sans-serif !important;
+        padding-right: 2px;
+    }}
+
+    /* User bubble: solid Vertebra purple, pure white text */
+    .user-row {{
+        display: flex;
+        align-items: flex-end;
+        justify-content: flex-end;
+        margin-bottom: 10px;
+        padding: 0 14px;
+        direction: rtl;
+    }}
+    .user-bubble {{
+        background: {PURPLE} !important;
+        color: #FFFFFF !important;
+        border-radius: 16px 16px 4px 16px !important;
+        padding: 9px 13px !important;
+        max-width: 286px !important;
+        font-size: 0.87rem !important;
+        line-height: 1.55 !important;
+        font-family: 'Tajawal', sans-serif !important;
+        font-weight: 500 !important;
+        text-align: right !important;
+        direction: rtl !important;
+        box-shadow: 0 2px 8px rgba(176,33,177,0.22) !important;
+        word-wrap: break-word !important;
+    }}
+    .user-ts {{
+        font-size: 0.62rem !important;
+        color: rgba(255,255,255,0.72) !important;
+        margin-top: 3px !important;
+        direction: ltr !important;
+        text-align: right !important;
+        font-family: -apple-system, sans-serif !important;
+    }}
+
+    /* Chat messages wrapper */
+    .chat-area {{
+        padding: 14px 0 8px;
+        background: #FFFFFF;
+    }}
+
+    /* ─── QUICK REPLIES ──────────────────────────────────────────────────── */
+    .qr-label {{
+        font-size: 0.72rem;
+        color: #AAAAAA;
+        font-weight: 600;
+        text-align: right;
+        padding: 6px 16px 4px;
+        font-family: 'Tajawal', sans-serif;
+        direction: rtl;
+    }}
+    .qr-row-wrapper {{
+        padding: 2px 10px;
+    }}
+
+    /* Primary quick reply — solid Vertebra purple, white text */
+    .st-key-qr_yes button {{
+        background: {PURPLE} !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 9999px !important;
+        font-size: 0.78rem !important;
+        font-weight: 700 !important;
+        padding: 6px 10px !important;
+        box-shadow: 0 2px 6px rgba(176,33,177,0.18) !important;
+        transition: all 0.18s ease !important;
+        font-family: 'Tajawal', sans-serif !important;
+        width: 100% !important;
+        min-height: 34px !important;
         height: auto !important;
-        line-height: 1.5 !important;
-    }
-    .stButton > button:hover {
-        background: linear-gradient(135deg, #2a2200 0%, #3a3000 100%) !important;
-        border-color: #D4AF37 !important;
-        box-shadow: 0 0 12px #D4AF3735 !important;
-        color: #f0d060 !important;
-        transform: translateX(3px) !important;
-    }
-    .stButton > button:active {
-        transform: translateX(1px) scale(0.98) !important;
-    }
+        line-height: 1.3 !important;
+        white-space: normal !important;
+    }}
+    .st-key-qr_yes button:hover {{
+        background: {PURPLE_DARK} !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 10px rgba(176,33,177,0.28) !important;
+    }}
 
-    /* ── Chat bubbles ─────────────────────────────────────────────────────── */
-    [data-testid="stChatMessageContent"] {
+    /* Secondary quick reply — white bg, purple border, purple text */
+    .st-key-qr_no button {{
+        background: #FFFFFF !important;
+        color: {PURPLE} !important;
+        border: 1.5px solid {PURPLE} !important;
+        border-radius: 9999px !important;
+        font-size: 0.78rem !important;
+        font-weight: 600 !important;
+        padding: 6px 10px !important;
         font-family: 'Tajawal', sans-serif !important;
+        width: 100% !important;
+        min-height: 34px !important;
+        height: auto !important;
+        line-height: 1.3 !important;
+        white-space: normal !important;
+        transition: all 0.18s ease !important;
+    }}
+    .st-key-qr_no button:hover {{
+        background: #F9F5FF !important;
+        border-color: {PURPLE_DARK} !important;
+    }}
+
+    /* Suggested full-width reply — white bg, purple border, purple text */
+    .st-key-qr_suggest button {{
+        background: #FFFFFF !important;
+        color: {PURPLE} !important;
+        border: 1.5px solid {PURPLE} !important;
+        border-radius: 9999px !important;
+        font-size: 0.78rem !important;
+        font-weight: 600 !important;
+        padding: 7px 16px !important;
+        font-family: 'Tajawal', sans-serif !important;
+        width: 100% !important;
+        min-height: 34px !important;
+        height: auto !important;
+        line-height: 1.3 !important;
+        white-space: normal !important;
+        transition: all 0.18s ease !important;
+        margin-top: 4px !important;
+    }}
+    .st-key-qr_suggest button:hover {{
+        background: #F9F5FF !important;
+    }}
+
+    /* ─── CHAT INPUT ─────────────────────────────────────────────────────── */
+    /* Light grey bar, no dark background */
+    [data-testid="stChatInput"] {{
+        background-color: #F4F4F4 !important;
+        border: 1px solid #E0E0E0 !important;
+        border-radius: 22px !important;
+        box-shadow: none !important;
+        padding: 2px 6px !important;
+        position: relative !important;
+        transition: border-color 0.2s ease !important;
+    }}
+    [data-testid="stChatInput"]:focus-within {{
+        border-color: {PURPLE} !important;
+        background: #F9F5FF !important;
+        box-shadow: 0 0 0 2px rgba(176,33,177,0.10) !important;
+    }}
+
+    /* ☺ smiley + 📎 paperclip injected on left side */
+    [data-testid="stChatInput"]::before {{
+        content: "☺  📎";
+        position: absolute;
+        left: 14px;
+        bottom: 11px;
+        font-size: 0.95rem;
+        color: #BBBBBB;
+        pointer-events: none;
+        z-index: 5;
+        line-height: 1;
+        letter-spacing: 3px;
+    }}
+
+    /* Textarea: transparent bg, dark grey text, padded for icons */
+    [data-testid="stChatInputTextArea"] textarea {{
+        background: transparent !important;
+        color: #333333 !important;
         direction: rtl !important;
         text-align: right !important;
-        writing-mode: horizontal-tb !important;
-        unicode-bidi: embed !important;
-        border-radius: 14px !important;
-        padding: 0.85rem 1.1rem !important;
-        font-size: 1.03rem !important;
-        line-height: 1.85 !important;
-    }
-
-    /* User bubble */
-    [data-testid="stChatMessage"][data-message-author-role="user"]
-    [data-testid="stChatMessageContent"] {
-        background: linear-gradient(135deg, #1e1a00 0%, #2c2500 100%) !important;
-        color: #f5e6c8 !important;
-        border: 1px solid #D4AF3760 !important;
-        box-shadow: inset 0 1px 0 #D4AF3720, 0 2px 8px #00000080 !important;
-    }
-
-    /* Assistant bubble */
-    [data-testid="stChatMessage"][data-message-author-role="assistant"]
-    [data-testid="stChatMessageContent"] {
-        background: #161616 !important;
-        color: #e8e0d0 !important;
-        border: 1px solid #2a2a2a !important;
-        box-shadow: 0 2px 8px #00000060 !important;
-    }
-
-    /* Avatars */
-    [data-testid="chatAvatarIcon-user"] {
-        background-color: #D4AF37 !important;
-        border-radius: 50% !important;
-    }
-    [data-testid="chatAvatarIcon-user"] svg { fill: #0d0d0d !important; }
-    [data-testid="chatAvatarIcon-assistant"] {
-        background-color: #1a1a1a !important;
-        border: 1px solid #D4AF3740 !important;
-        border-radius: 50% !important;
-    }
-
-    /* ── Chat input ───────────────────────────────────────────────────────── */
-    [data-testid="stChatInputTextArea"] textarea {
-        direction: rtl !important;
-        text-align: right !important;
-        writing-mode: horizontal-tb !important;
-        unicode-bidi: embed !important;
+        padding-left: 64px !important;   /* room for ☺ 📎 */
+        padding-right: 10px !important;
         font-family: 'Tajawal', sans-serif !important;
-        font-size: 1rem !important;
-        background: #141414 !important;
-        color: #f0ead8 !important;
-        border: 1px solid #D4AF3755 !important;
-        border-radius: 12px !important;
-        caret-color: #D4AF37 !important;
-    }
-    [data-testid="stChatInputTextArea"] textarea::placeholder {
-        color: #555 !important;
+        font-size: 0.87rem !important;
+        font-weight: 500 !important;
+    }}
+    [data-testid="stChatInputTextArea"] textarea::placeholder {{
+        color: #CCCCCC !important;
         font-family: 'Tajawal', sans-serif !important;
-    }
-    [data-testid="stChatInputTextArea"] textarea:focus {
-        border-color: #D4AF37 !important;
-        box-shadow: 0 0 10px #D4AF3740 !important;
-        outline: none !important;
-    }
-    [data-testid="stChatInputSubmitButton"] button {
-        background-color: #D4AF37 !important;
-        border-radius: 8px !important;
+    }}
+
+    /* Send arrow button — Vertebra purple circle */
+    [data-testid="stChatInputSubmitButton"] button {{
+        background: {PURPLE} !important;
         border: none !important;
-    }
-    [data-testid="stChatInputSubmitButton"] button:hover {
-        background-color: #f0d060 !important;
-    }
+        border-radius: 50% !important;
+        transition: all 0.2s ease !important;
+    }}
+    [data-testid="stChatInputSubmitButton"] button:hover {{
+        background: {PURPLE_DARK} !important;
+        transform: scale(1.08) !important;
+    }}
+    [data-testid="stChatInputSubmitButton"] button svg {{
+        fill: #FFFFFF !important;
+    }}
 
-    /* ── Alerts ───────────────────────────────────────────────────────────── */
-    .stAlert {
+    /* ─── ALERTS & SPINNER ───────────────────────────────────────────────── */
+    .stAlert {{
         direction: rtl !important;
         text-align: right !important;
-        font-family: 'Tajawal', sans-serif !important;
         border-radius: 10px !important;
-    }
+        margin: 0 14px 8px !important;
+        font-family: 'Tajawal', sans-serif !important;
+    }}
+    .stSpinner > div {{
+        border-top-color: {PURPLE} !important;
+    }}
 
-    /* ── Spinner ──────────────────────────────────────────────────────────── */
-    .stSpinner > div { border-top-color: #D4AF37 !important; }
-
-    /* ── Dividers ─────────────────────────────────────────────────────────── */
-    hr {
-        border: none !important;
-        border-top: 1px solid #D4AF3725 !important;
-        margin: 0.6rem 0 !important;
-    }
-
-    /* ── HIDE ALL Streamlit chrome ────────────────────────────────────────── */
-    #MainMenu                       { display: none !important; }
-    header                          { display: none !important; }
-    footer                          { display: none !important; }
-    [data-testid="stToolbar"]       { display: none !important; }
-    [data-testid="stDecoration"]    { display: none !important; }
-    [data-testid="stStatusWidget"]  { display: none !important; }
+    /* ─── FOOTER ─────────────────────────────────────────────────────────── */
+    .widget-footer {{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        padding: 8px 0 10px;
+        font-size: 0.65rem;
+        color: #AAAAAA;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        direction: ltr;
+        letter-spacing: 0.2px;
+    }}
+    .footer-logo {{
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        object-fit: cover;
+        opacity: 0.75;
+        vertical-align: middle;
+    }}
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Session state
+# 5. Session State
 # ─────────────────────────────────────────────────────────────────────────────
+WELCOME_MSG: dict = {
+    "role": "assistant",
+    "content": "مرحباً بك! 👋 أنا **Vertebra AI**، مستشارك الذكي لاختيار أرقى العطور الخليجية.",
+    "ts": datetime.now().strftime("%I:%M %p"),
+}
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": (
-                "أهلاً وسهلاً! 🌹 أنا **نور**، مساعدتك الشخصية في متجر **AAA** للعطور الفاخرة.  \n"
-                "كيف يمكنني خدمتك اليوم؟"
-            ),
-        }
-    ]
+    st.session_state.messages = [WELCOME_MSG]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Full-width header
+# 6. Header Row — brand (left) + ↻ and ✕ (right)
+#    Uses st.columns so the buttons are real clickable Streamlit widgets
 # ─────────────────────────────────────────────────────────────────────────────
-st.markdown(
-    f"""
-    <div style='text-align:center; padding:1rem 0 0.5rem;'>
-        <div style='font-size:2.2rem; font-weight:700; color:{GOLD};
-                    font-family:Tajawal,sans-serif; letter-spacing:2px;
-                    text-shadow:0 0 24px #D4AF3750;'>
-            🌹 &nbsp; AAA للعطور الفاخرة
-        </div>
-        <div style='font-size:0.95rem; color:#555; font-family:Tajawal,sans-serif;
-                    margin-top:0.35rem;'>
-            مساعدك الذكي لاختيار أرقى العطور الخليجية
-        </div>
-    </div>
-    <hr style='border:none; border-top:1px solid {GOLD}25; margin:0.6rem 0 0.8rem;'>
-    """,
-    unsafe_allow_html=True,
-)
+col_brand, col_ref, col_ex = st.columns([8, 1, 1])
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Column layout — [chat 75%] | [suggestions 25%]
-# ─────────────────────────────────────────────────────────────────────────────
-col_chat, col_suggest = st.columns([3, 1])
-
-# ── Right column: Suggestions panel ──────────────────────────────────────────
-with col_suggest:
+with col_brand:
+    logo_img = (
+        f'<img src="{LOGO_URI}" style="width:38px;height:38px;border-radius:50%;'
+        f'object-fit:cover;border:1.5px solid #F0ABFC;" alt="Logo" />'
+        if LOGO_URI
+        else '<div style="width:38px;height:38px;border-radius:50%;background:#F3F3F5;'
+             'display:flex;align-items:center;justify-content:center;font-size:1.2rem;">✨</div>'
+    )
     st.markdown(
-        """
-        <div style='margin-bottom:1rem; direction:rtl;'>
-            <div style='
-                font-family: Tajawal, sans-serif;
-                font-size: 1.15rem;
-                font-weight: 700;
-                text-align: right;
-                background: linear-gradient(100deg, #B89947 0%, #D4AF37 45%, #F5DC6E 70%, #D4AF37 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-                letter-spacing: 0.5px;
-                margin-bottom: 0.4rem;
-            '>✨ أسئلة مقترحة</div>
-            <div style='
-                height: 1.5px;
-                background: linear-gradient(90deg, transparent 0%, #D4AF37 40%, #F5DC6E 60%, transparent 100%);
-                margin-bottom: 0.5rem;
-                border-radius: 2px;
-            '></div>
-            <div style='
-                color: #4a4a4a;
-                font-family: Tajawal, sans-serif;
-                font-size: 0.78rem;
-                text-align: right;
-                font-style: italic;
-            '>اضغط على أي سؤال لإرساله مباشرةً</div>
+        f"""
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 0 12px 14px;
+                    background:#FFFFFF;direction:rtl;border-bottom:1px solid #F0F0F0;">
+            <div style="position:relative;width:38px;height:38px;flex-shrink:0;">
+                {logo_img}
+                <span style="position:absolute;bottom:1px;right:1px;width:10px;height:10px;
+                             background:#22C55E;border:2px solid #fff;border-radius:50%;"></span>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:0.95rem;font-weight:800;color:#1F2937;
+                            font-family:'Tajawal',sans-serif;line-height:1.2;">Vertebra AI</div>
+                <div style="font-size:0.72rem;color:#22C55E;font-weight:600;
+                            font-family:-apple-system,sans-serif;margin-top:1px;">We're online...</div>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    for question in SUGGESTIONS:
-        if st.button(question, key=f"btn_{question}", use_container_width=True):
-            st.session_state.pending_message = question
-            st.rerun()
 
-# ── Left column: Chat history ─────────────────────────────────────────────────
-with col_chat:
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"], avatar=AVATARS[msg["role"]]):
-            st.markdown(msg["content"])
+with col_ref:
+    if st.button("↻", key="btn_refresh", help="إعادة تعيين المحادثة / Reset"):
+        st.session_state.messages = [
+            dict(WELCOME_MSG, ts=datetime.now().strftime("%I:%M %p"))
+        ]
+        st.session_state.pop("pending_message", None)
+        st.rerun()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Chat input — always at root level (Streamlit pins it to page bottom)
-# ─────────────────────────────────────────────────────────────────────────────
-chat_input = st.chat_input("اكتب رسالتك هنا... ✍️")
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Resolve user input: sidebar button (pending_message) OR manual chat_input
-# ─────────────────────────────────────────────────────────────────────────────
-pending = st.session_state.get("pending_message")
-if pending:
-    del st.session_state["pending_message"]
-    user_input = pending
-elif chat_input:
-    user_input = chat_input
-else:
-    user_input = None
+with col_ex:
+    if st.button("✕", key="btn_exit", help="مسح المحادثة / Clear"):
+        st.session_state.messages = [
+            dict(WELCOME_MSG, ts=datetime.now().strftime("%I:%M %p"))
+        ]
+        st.session_state.pop("pending_message", None)
+        st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Process → call FastAPI → display reply (appended to col_chat)
+# 7. Message Renderer — custom HTML bubbles, no st.chat_message()
+# ─────────────────────────────────────────────────────────────────────────────
+def _safe_html(text: str) -> str:
+    """Escape HTML entities and convert markdown bold + newlines."""
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    text = text.replace("\n", "<br>")
+    text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", text)
+    return text
+
+
+def render_messages(messages: list[dict]) -> str:
+    bot_avatar = (
+        f'<img src="{LOGO_URI}" class="bot-avt" alt="Vertebra AI" />'
+        if LOGO_URI
+        else '<div class="bot-avt-fallback">✨</div>'
+    )
+    parts = ['<div class="chat-area">']
+    for msg in messages:
+        ts = msg.get("ts", datetime.now().strftime("%I:%M %p"))
+        body = _safe_html(msg["content"])
+        if msg["role"] == "assistant":
+            parts.append(
+                f'<div class="bot-row">'
+                f'  {bot_avatar}'
+                f'  <div>'
+                f'    <div class="bot-bubble">{body}</div>'
+                f'    <div class="bot-ts">{ts}</div>'
+                f'  </div>'
+                f'</div>'
+            )
+        else:
+            parts.append(
+                f'<div class="user-row">'
+                f'  <div>'
+                f'    <div class="user-bubble">{body}</div>'
+                f'    <div class="user-ts">{ts}</div>'
+                f'  </div>'
+                f'</div>'
+            )
+    parts.append("</div>")
+    return "".join(parts)
+
+
+st.markdown(render_messages(st.session_state.messages), unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. Quick Replies — Primary (solid purple), Secondary (white border),
+#    Suggested (full-width white border)
+#    Clicking fires pending_message → st.rerun() → processed below
+# ─────────────────────────────────────────────────────────────────────────────
+st.markdown('<div class="qr-label">ردود سريعة:</div>', unsafe_allow_html=True)
+
+qr1, qr2 = st.columns([1, 1])
+with qr1:
+    if st.button("✅ نعم، بالتأكيد!", key="qr_yes", use_container_width=True):
+        st.session_state.pending_message = "نعم، أريد المساعدة في اختيار عطر فاخر لديكم"
+        st.rerun()
+with qr2:
+    if st.button("❌ لا، شكراً", key="qr_no", use_container_width=True):
+        st.session_state.pending_message = "شكراً، لا أحتاج مساعدة الآن"
+        st.rerun()
+
+if st.button("🔍 ما هي أشهر منتجاتكم؟", key="qr_suggest", use_container_width=True):
+    st.session_state.pending_message = "ما هي العطور الأكثر مبيعاً وشعبيةً لديكم؟"
+    st.rerun()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. Chat Input (styled via CSS above — light grey bar, ☺ 📎 on left)
+# ─────────────────────────────────────────────────────────────────────────────
+chat_input = st.chat_input("اكتب رسالتك...")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 10. Resolve user input — quick-reply button or typed message
+# ─────────────────────────────────────────────────────────────────────────────
+pending = st.session_state.pop("pending_message", None)
+user_input: str | None = pending or (chat_input if chat_input else None)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 11. Process → FastAPI → store → rerun
 # ─────────────────────────────────────────────────────────────────────────────
 if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
+    ts_now = datetime.now().strftime("%I:%M %p")
+    st.session_state.messages.append({"role": "user", "content": user_input, "ts": ts_now})
 
-    # Re-enter col_chat to append new messages below existing history
-    with col_chat:
-        with st.chat_message("user", avatar=AVATARS["user"]):
-            st.markdown(user_input)
+    with st.spinner("Vertebra AI يكتب..."):
+        try:
+            res = requests.post(
+                API_URL,
+                json={"message": user_input},
+                timeout=API_TIMEOUT,
+            )
+            res.raise_for_status()
+            reply: str | None = res.json().get("reply", "عذراً، لم أتلقَّ رداً.")
+        except requests.exceptions.ConnectionError:
+            reply = None
+            st.error("⚠️ تعذّر الاتصال بالخادم — تأكد من تشغيل FastAPI على المنفذ 8000.")
+        except requests.exceptions.Timeout:
+            reply = None
+            st.error("⏱️ انتهت مهلة الانتظار. الخادم بطيء.")
+        except requests.exceptions.HTTPError as exc:
+            reply = None
+            st.error(f"❌ خطأ {exc.response.status_code}: {exc.response.text}")
+        except Exception as exc:
+            reply = None
+            st.error(f"❌ خطأ غير متوقع: {exc}")
 
-        with st.chat_message("assistant", avatar=AVATARS["assistant"]):
-            with st.spinner("جارٍ التفكير... 💭"):
-                try:
-                    response = requests.post(
-                        API_URL,
-                        json={"message": user_input},
-                        timeout=API_TIMEOUT,
-                    )
-                    response.raise_for_status()
-                    reply = response.json().get("reply", "عذراً، لم أتلقَّ رداً من الخادم.")
-
-                except requests.exceptions.ConnectionError:
-                    reply = None
-                    st.error(
-                        "⚠️ **تعذّر الاتصال بالخادم.**  \n"
-                        "يرجى التأكد من تشغيل خادم FastAPI على المنفذ 8000."
-                    )
-                except requests.exceptions.Timeout:
-                    reply = None
-                    st.error("⏱️ **انتهت مهلة الانتظار.** الخادم يستغرق وقتاً أطول من المعتاد.")
-                except requests.exceptions.HTTPError as exc:
-                    reply = None
-                    st.error(
-                        f"❌ **خطأ من الخادم:** {exc.response.status_code}  \n{exc.response.text}"
-                    )
-                except Exception as exc:
-                    reply = None
-                    st.error(f"❌ **خطأ غير متوقع:** {exc}")
-
-            if reply:
-                st.markdown(reply)
-                st.session_state.messages.append({"role": "assistant", "content": reply})
+    if reply:
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": reply,
+            "ts": datetime.now().strftime("%I:%M %p"),
+        })
+        st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Full-width page watermark footer
+# 12. Footer — muted, minimal, absolute bottom of widget
 # ─────────────────────────────────────────────────────────────────────────────
+footer_logo_tag = (
+    f'<img src="{LOGO_URI}" class="footer-logo" alt="Vertebra" />'
+    if LOGO_URI else ""
+)
 st.markdown(
-    """
-    <div style='
-        text-align: center;
-        padding: 1.8rem 0 0.6rem;
-        font-family: Tajawal, sans-serif;
-        direction: rtl;
-    '>
-        <div style='
-            height: 1px;
-            background: linear-gradient(90deg, transparent, #B8994740, transparent);
-            margin-bottom: 0.9rem;
-        '></div>
-        <span style='
-            color: #B89947;
-            font-size: 0.8rem;
-            letter-spacing: 1.5px;
-            font-weight: 400;
-            opacity: 0.75;
-        '>⚡ مدعوم بأنظمة AAA الذكية</span>
-    </div>
-    """,
+    f'<div class="widget-footer">'
+    f'Powered by <strong style="color:#8E8E93;margin-left:2px;">Vertebra</strong>'
+    f'{footer_logo_tag}'
+    f'</div>',
     unsafe_allow_html=True,
 )

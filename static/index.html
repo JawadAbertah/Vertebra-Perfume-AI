@@ -157,7 +157,7 @@
 
             try {
                 // 1. إرسال الرسالة إلى الـ AI
-                const response = await fetch('http://127.0.0.1:8000/chat', {
+                const response = await fetch('https://vertebraperfumeai-4c93vr97.b4a.run/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
@@ -175,7 +175,7 @@
                     
                     if (parsedReply.order_trigger) {
                         // 3. إرسال الطلب إلى قاعدة البيانات (MongoDB)
-                        await fetch('http://127.0.0.1:8000/order', {
+                        await fetch('https://vertebraperfumeai-4c93vr97.b4a.run/order', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({

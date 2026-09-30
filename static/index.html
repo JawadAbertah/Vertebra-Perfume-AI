@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المستشار الذكي - AAA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { overflow: hidden; margin: 0; padding: 0; }
+        
+        .markdown-content p { margin-bottom: 0.5rem; }
+        .markdown-content p:last-child { margin-bottom: 0; }
+        .markdown-content strong { font-weight: 700; color: #1f2937; }
+        .markdown-content ul, .markdown-content ol { margin-right: 1rem; margin-bottom: 0.5rem; padding-inline-start: 1rem; }
+        .markdown-content li { list-style-type: disc; margin-bottom: 0.25rem; }
+        
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
+        body { font-family: 'Tajawal', sans-serif; background-color: transparent; }
+        
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .vertebra-bg { background-color: #9B26B6; }
+        .vertebra-text { color: #9B26B6; }
+        .vertebra-border { border-color: #9B26B6; }
+    </style>
+</head>
+<body class="flex items-center justify-center h-screen w-screen m-0 bg-transparent">
+
+    <!-- SaaS Widget Container -->
+    <div class="bg-white w-full h-full md:w-[400px] md:h-[700px] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden relative border border-gray-100">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white z-10 shadow-sm">
+            <div class="flex items-center gap-3">
+                <img src="/static/logo.png" alt="Logo" class="w-10 h-10 rounded-full object-contain bg-gray-50 border border-gray-100 p-0.5">
+                <div>
+                    <h1 class="font-bold text-gray-800 text-sm">مستشار المبيعات</h1>
+                    <div class="flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                        <span class="text-xs text-green-500 font-medium">متصل الآن</span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="location.reload()" class="text-gray-400 hover:text-gray-600 transition" title="إعادة التحميل">↻</button>
+                <button onclick="window.parent.postMessage('closeChatWidget', '*')" class="text-gray-400 hover:text-gray-600 transition text-lg" title="إغلاق">✕</button>
+            </div>
+        </div>
+
+        <!-- Chat History -->
+        <div id="chat-box" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 scrollbar-hide">
+            <!-- Initial Bot Message -->
+            <div class="flex items-start gap-2 max-w-[85%]">
+                <!-- التعديل 2: اللوغو في رسالة الترحيب الأولى -->
+                <img src="/static/logo.png" alt="Bot" class="w-8 h-8 rounded-full object-contain bg-white border border-gray-100 flex-shrink-0 mt-1 p-0.5 shadow-sm">
+                <div class="bg-white text-gray-800 px-4 py-3 rounded-2xl rounded-tr-none shadow-sm text-sm border border-gray-100 leading-relaxed">
+                    مرحباً بك! 👋 أنا مستشارك الذكي لاختيار أرقى العطور الخليجية. كيف يمكنني مساعدتك اليوم؟
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Replies -->
+        <div class="px-4 pb-2 bg-gray-50 pt-2 border-t border-gray-100">
+            <div class="text-[11px] text-gray-400 mb-2 font-medium">ردود سريعة:</div>
+            <div class="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+                <button onclick="sendQuickReply('ما هي العطور الأكثر مبيعاً وشعبية لديكم؟')" class="vertebra-bg text-white px-4 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap shadow-sm hover:opacity-90 transition">
+                    ما هي أشهر منتجاتكم؟
+                </button>
+                <button onclick="sendQuickReply('هل الشحن مجاني؟')" class="bg-white vertebra-text vertebra-border border px-4 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap shadow-sm hover:bg-gray-50 transition">
+                    هل الشحن مجاني؟
+                </button>
+            </div>
+        </div>
+
+        <!-- Input Area & Footer -->
+        <div class="p-3 bg-white border-t border-gray-100 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
+            <div class="flex items-center bg-gray-50 border border-gray-200 rounded-full px-1 py-1 focus-within:border-purple-300 focus-within:ring-2 focus-within:ring-purple-100 transition duration-200">
+                <input type="text" id="user-input" placeholder="اكتب رسالتك هنا..." class="flex-1 bg-transparent border-none outline-none text-sm text-gray-800 px-3 py-2 placeholder-gray-400" onkeypress="handleKeyPress(event)">
+                <button onclick="sendMessage()" class="vertebra-bg text-white p-2 rounded-full transition shadow-sm hover:opacity-90 mx-1 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform -rotate-90" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Footer -->
+            <div class="text-center mt-3 flex items-center justify-center gap-1.5 opacity-50 hover:opacity-100 transition">
+                <span class="text-[10px] text-gray-400 font-medium tracking-wide">Powered by</span>
+                <!-- اللوغو الصغير في الأسفل (Footer) -->
+                <img src="/static/logo.png" class="h-3 object-contain grayscale opacity-70">
+                <span class="text-[10px] text-gray-500 font-bold tracking-wide">AAA</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const sessionId = "sess_" + Math.random().toString(36).substr(2, 9);
+        const clientId = "aaa_perfumes_001";
+        
+        const chatBox = document.getElementById('chat-box');
+        const userInput = document.getElementById('user-input');
+
+        function appendMessage(sender, text) {
+            const div = document.createElement('div');
+            const time = new Date().toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' });
+            
+            if (sender === 'user') {
+                div.className = 'flex justify-end mb-4';
+                div.innerHTML = `
+                    <div class="max-w-[85%]">
+                        <div class="vertebra-bg text-white px-4 py-3 rounded-2xl rounded-tl-none shadow-sm text-sm break-words">${text}</div>
+                        <div class="text-[10px] text-gray-400 mt-1 text-left">${time}</div>
+                    </div>`;
+            } else {
+                const formattedText = marked.parse(text);
+                div.className = 'flex items-start gap-2 max-w-[85%] mb-4';
+                div.innerHTML = `
+                    <img src="/static/logo.png" alt="Bot" class="w-8 h-8 rounded-full object-contain bg-white border border-gray-100 flex-shrink-0 mt-1 p-0.5 shadow-sm">
+                    <div class="flex-1 min-w-0">
+                        <div class="bg-white text-gray-800 px-4 py-3 rounded-2xl rounded-tr-none shadow-sm text-sm border border-gray-100 markdown-content leading-relaxed overflow-hidden">${formattedText}</div>
+                        <div class="text-[10px] text-gray-400 mt-1">${time}</div>
+                    </div>`;
+            }
+            chatBox.appendChild(div);
+            // إضافة timeout صغير لضمان نزول السكرول بعد رندر الـ Markdown
+            setTimeout(() => {
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 50);
+        }
+
+        function appendLoading() {
+            const id = 'loading-' + Date.now();
+            const div = document.createElement('div');
+            div.id = id;
+            div.className = 'flex items-start gap-2 max-w-[85%] mb-4';
+            div.innerHTML = `
+                <img src="/static/logo.png" class="w-8 h-8 rounded-full object-contain bg-white border border-gray-100 flex-shrink-0 mt-1 p-0.5 shadow-sm animate-pulse">
+                <div class="bg-white text-gray-500 px-4 py-3 rounded-2xl rounded-tr-none shadow-sm text-sm border border-gray-100 flex gap-1.5 items-center h-10">
+                    <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span>
+                    <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.15s"></span>
+                    <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.3s"></span>
+                </div>`;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            return id;
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            appendMessage('user', text);
+            userInput.value = '';
+            const loadingId = appendLoading();
+
+            try {
+                // 1. إرسال الرسالة إلى الـ AI
+                const response = await fetch('http://127.0.0.1:8000/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        message: text,
+                        client_id: clientId,
+                        session_id: sessionId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // 2. التحقق مما إذا كان الرد عبارة عن أمر تسجيل مبيعة (JSON)
+                try {
+                    const parsedReply = JSON.parse(data.reply);
+                    
+                    if (parsedReply.order_trigger) {
+                        // 3. إرسال الطلب إلى قاعدة البيانات (MongoDB)
+                        await fetch('http://127.0.0.1:8000/order', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                customer_name: parsedReply.customer_name,
+                                phone_number: parsedReply.phone,
+                                city: parsedReply.address,
+                                perfume_name: parsedReply.perfume_name || "عطر غير محدد", 
+                                total_price: Number(parsedReply.total_price) || 0
+                            })
+                        });
+                        
+                        document.getElementById(loadingId).remove();
+                        appendMessage('bot', "🎉 تم تسجيل طلبك بنجاح! سيتواصل معك فريقنا قريباً لتأكيد الشحن. 🌹");
+                        return;
+                    }
+                } catch (e) {
+                    document.getElementById(loadingId).remove();
+                    appendMessage('bot', data.reply || "عذراً، حدث خطأ.");
+                }
+
+            } catch (error) {
+                document.getElementById(loadingId).remove();
+                appendMessage('bot', "⚠️ لا يمكن الاتصال بالسيرفر. يرجى المحاولة لاحقاً.");
+            }
+        }
+
+        function handleKeyPress(e) {
+            if (e.key === 'Enter') sendMessage();
+        }
+
+        function sendQuickReply(text) {
+            userInput.value = text;
+            sendMessage();
+        }
+    </script>
+</body>
+</html>

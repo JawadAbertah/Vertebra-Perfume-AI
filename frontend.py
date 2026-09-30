@@ -8,6 +8,7 @@ import base64
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import requests
 import streamlit as st
@@ -52,66 +53,40 @@ st.markdown(
     /* ── Tajawal Arabic Font ──────────────────────────────────────────────── */
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800&display=swap');
 
-    /* ── Grey page that sits behind the floating widget ──────────────────── */
-    html, body, .stApp {{
-        background-color: #DEDEDE !important;
-        font-family: 'Tajawal', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        direction: rtl !important;
-    }}
+    /* 1. Force the main app background to grey */
+    .stApp {{ background-color: #E5E5E5 !important; }}
 
-    /* ── THE FLOATING WIDGET CARD (400 px, white, rounded, shadow) ───────── */
+    /* 2. The Main Widget Card */
     .block-container {{
-        max-width: 400px !important;
-        width: 400px !important;
-        margin: 28px auto 0 !important;
-        padding: 0 0 130px 0 !important;   /* bottom padding = input bar height */
-        background: #FFFFFF !important;
+        max-width: 420px !important;
+        background-color: #FFFFFF !important;
         border-radius: 16px !important;
-        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.16) !important;
-        overflow: visible !important;      /* allow fixed input to overlap cleanly */
+        margin-top: 40px !important;
+        padding: 20px 20px 0px 20px !important;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1) !important;
     }}
 
-    /* ── Column gaps: none inside the widget ─────────────────────────────── */
-    [data-testid="stHorizontalBlock"] {{
-        gap: 0 !important;
-        align-items: stretch !important;
-    }}
-    [data-testid="column"] {{
-        padding: 0 !important;
-    }}
-
-    /* ── Chat input bar — fixed, centered, matches widget width ──────────── */
-    div[data-testid="stBottom"] {{
-        position: fixed !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        width: 400px !important;
-        max-width: 400px !important;
-        bottom: 0 !important;
-        background: #FFFFFF !important;
-        border-top: 1px solid #EEEEEE !important;
-        padding: 10px 14px 14px !important;
-        border-radius: 0 0 16px 16px !important;
-        z-index: 9999 !important;
-        box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06) !important;
-    }}
-    div[data-testid="stBottom"] > div {{
-        max-width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        background: transparent !important;
+    /* 3. Rip the Input Container from the Viewport Bottom and Dock It */
+    [data-testid="stBottom"] {{
+        position: static !important; 
+        width: 100% !important;
+        max-width: 420px !important; 
+        margin: 0 auto !important;
+        background-color: #FFFFFF !important;
+        padding: 0px 20px 20px 20px !important;
+        border-bottom-left-radius: 16px !important;
+        border-bottom-right-radius: 16px !important;
     }}
 
-    /* ── Hide ALL default Streamlit chrome ───────────────────────────────── */
-    #MainMenu, header, footer,
-    [data-testid="stToolbar"],
-    [data-testid="stDecoration"],
-    [data-testid="stStatusWidget"],
-    section[data-testid="stSidebar"],
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="collapsedControl"] {{
-        display: none !important;
-    }}
+    /* 4. Annihilate the Dark Mode Input Box */
+    [data-testid="stChatInput"] {{ background-color: #FFFFFF !important; border: 1px solid #E0E0E0 !important; border-radius: 24px !important; padding: 0 !important; }}
+    [data-testid="stChatInput"] * {{ background-color: transparent !important; color: #333333 !important; }}
+    div[data-baseweb="input"] {{ background-color: #FFFFFF !important; border: none !important; }}
+
+    /* 5. Hide Streamlit Header & Annoying Defaults */
+    [data-testid="stHeader"], #MainMenu, footer,
+    [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"],
+    section[data-testid="stSidebar"], [data-testid="collapsedControl"] {{ display: none !important; }}
 
     /* ── RTL: prevent vertical text stacking ─────────────────────────────── */
     p, span, div, label, button, h1, h2, h3, h4, h5, h6 {{
@@ -260,9 +235,9 @@ st.markdown(
         font-family: -apple-system, sans-serif !important;
     }}
 
-    /* Chat messages wrapper */
+    /* Chat messages wrapper — extra bottom pad prevents last bubble cramping */
     .chat-area {{
-        padding: 14px 0 8px;
+        padding: 14px 0 20px;
         background: #FFFFFF;
     }}
 
@@ -271,10 +246,10 @@ st.markdown(
         font-size: 0.72rem;
         color: #AAAAAA;
         font-weight: 600;
-        text-align: right;
+        text-align: right !important;
+        direction: rtl !important;
         padding: 6px 16px 4px;
         font-family: 'Tajawal', sans-serif;
-        direction: rtl;
     }}
     .qr-row-wrapper {{
         padding: 2px 10px;
@@ -348,57 +323,26 @@ st.markdown(
         background: #F9F5FF !important;
     }}
 
-    /* ─── CHAT INPUT ─────────────────────────────────────────────────────── */
-    /* Light grey bar, no dark background */
-    [data-testid="stChatInput"] {{
-        background-color: #F4F4F4 !important;
-        border: 1px solid #E0E0E0 !important;
-        border-radius: 22px !important;
-        box-shadow: none !important;
-        padding: 2px 6px !important;
-        position: relative !important;
-        transition: border-color 0.2s ease !important;
-    }}
+    /* ─── CHAT INPUT (Text Direction & Cursor overrides only) ───────────── */
     [data-testid="stChatInput"]:focus-within {{
         border-color: {PURPLE} !important;
-        background: #F9F5FF !important;
-        box-shadow: 0 0 0 2px rgba(176,33,177,0.10) !important;
+        box-shadow: 0 0 0 3px rgba(176,33,177,0.08) !important;
     }}
-
-    /* ☺ smiley + 📎 paperclip injected on left side */
-    [data-testid="stChatInput"]::before {{
-        content: "☺  📎";
-        position: absolute;
-        left: 14px;
-        bottom: 11px;
-        font-size: 0.95rem;
-        color: #BBBBBB;
-        pointer-events: none;
-        z-index: 5;
-        line-height: 1;
-        letter-spacing: 3px;
-    }}
-
-    /* Textarea: transparent bg, dark grey text, padded for icons */
-    [data-testid="stChatInputTextArea"] textarea {{
-        background: transparent !important;
-        color: #333333 !important;
+    [data-testid="stChatInput"] textarea {{
         direction: rtl !important;
         text-align: right !important;
-        padding-left: 64px !important;   /* room for ☺ 📎 */
-        padding-right: 10px !important;
         font-family: 'Tajawal', sans-serif !important;
         font-size: 0.87rem !important;
-        font-weight: 500 !important;
+        caret-color: {PURPLE} !important;
     }}
     [data-testid="stChatInputTextArea"] textarea::placeholder {{
-        color: #CCCCCC !important;
+        color: #BBBBBB !important;
         font-family: 'Tajawal', sans-serif !important;
     }}
 
     /* Send arrow button — Vertebra purple circle */
     [data-testid="stChatInputSubmitButton"] button {{
-        background: {PURPLE} !important;
+        background: #9B26B6 !important;
         border: none !important;
         border-radius: 50% !important;
         transition: all 0.2s ease !important;
@@ -430,6 +374,7 @@ st.markdown(
         justify-content: center;
         gap: 5px;
         padding: 8px 0 10px;
+        margin-bottom: 5px !important;
         font-size: 0.65rem;
         color: #AAAAAA;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
@@ -565,15 +510,15 @@ st.markdown('<div class="qr-label">ردود سريعة:</div>', unsafe_allow_htm
 
 qr1, qr2 = st.columns([1, 1])
 with qr1:
-    if st.button("✅ نعم، بالتأكيد!", key="qr_yes", use_container_width=True):
+    if st.button("نعم، بالتأكيد", key="qr_yes", use_container_width=True):
         st.session_state.pending_message = "نعم، أريد المساعدة في اختيار عطر فاخر لديكم"
         st.rerun()
 with qr2:
-    if st.button("❌ لا، شكراً", key="qr_no", use_container_width=True):
+    if st.button("لا، شكراً لك", key="qr_no", use_container_width=True):
         st.session_state.pending_message = "شكراً، لا أحتاج مساعدة الآن"
         st.rerun()
 
-if st.button("🔍 ما هي أشهر منتجاتكم؟", key="qr_suggest", use_container_width=True):
+if st.button("ما هي أشهر منتجاتكم؟", key="qr_suggest", use_container_width=True):
     st.session_state.pending_message = "ما هي العطور الأكثر مبيعاً وشعبيةً لديكم؟"
     st.rerun()
 
@@ -586,7 +531,7 @@ chat_input = st.chat_input("اكتب رسالتك...")
 # 10. Resolve user input — quick-reply button or typed message
 # ─────────────────────────────────────────────────────────────────────────────
 pending = st.session_state.pop("pending_message", None)
-user_input: str | None = pending or (chat_input if chat_input else None)
+user_input: Optional[str] = pending or (chat_input if chat_input else None)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 11. Process → FastAPI → store → rerun
@@ -603,7 +548,7 @@ if user_input:
                 timeout=API_TIMEOUT,
             )
             res.raise_for_status()
-            reply: str | None = res.json().get("reply", "عذراً، لم أتلقَّ رداً.")
+            reply: Optional[str] = res.json().get("reply", "عذراً، لم أتلقَّ رداً.")
         except requests.exceptions.ConnectionError:
             reply = None
             st.error("⚠️ تعذّر الاتصال بالخادم — تأكد من تشغيل FastAPI على المنفذ 8000.")

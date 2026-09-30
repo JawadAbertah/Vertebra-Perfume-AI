@@ -2,7 +2,7 @@ import os
 from google import genai
 from dotenv import load_dotenv
 
-# كيقرا الساروت من ملف .env
+
 load_dotenv()
 api_key = os.getenv("GOOGLE_API_KEY")
 

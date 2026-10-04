@@ -24,7 +24,6 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from pydantic import BaseModel, Field
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
-from mangum import Mangum
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Environment & constants
@@ -228,4 +227,3 @@ if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 
 
-handler = Mangum(app)

@@ -1,5 +1,5 @@
 (function() {
-    const BASE_URL = "http://127.0.0.1:8000";
+    const BASE_URL = "https://vertebra-perfume-ai.onrender.com";
 
     const styles = `
         #vertebra-chat-widget { position: fixed; bottom: 20px; right: 20px; z-index: 999999; display: flex; flex-direction: column; align-items: flex-end; font-family: 'Tajawal', sans-serif; }

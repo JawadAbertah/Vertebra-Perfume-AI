@@ -1,7 +1,6 @@
 """
 main.py — AAA Luxury Perfume Bot
-Stack : FastAPI · LangChain (context-stuffing RAG) · Motor (async MongoDB)
-Author: Senior Python Backend Developer
+Stack : FastAPI · LangChain (HuggingFace RAG) · Motor (async MongoDB)
 """
 
 import re
@@ -9,9 +8,9 @@ import json
 import certifi
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 import os
 
+from pymongo import MongoClient
 import motor.motor_asyncio
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -23,15 +22,18 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from pydantic import BaseModel, Field
-from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
+
+# مكتبات RAG الجديدة
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_mongodb import MongoDBAtlasVectorSearch
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Environment & constants
 # ─────────────────────────────────────────────────────────────────────────────
 load_dotenv()
 
-CATALOG_PATH: Path = Path("data/catalog.json")
+# استخدام MONGO_URI كما طلبت
 MONGO_URI: str = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
 GOOGLE_MODEL: str = "gemini-3.1-flash-lite"
@@ -45,44 +47,6 @@ def get_session_history(session_id: str) -> ChatMessageHistory:
     return store[session_id]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Data loading & context formatting
-# ─────────────────────────────────────────────────────────────────────────────
-def load_catalog() -> dict:
-    if not CATALOG_PATH.exists():
-        raise FileNotFoundError(f"Catalog file not found at: {CATALOG_PATH}")
-    with open(CATALOG_PATH, encoding="utf-8") as fh:
-        return json.load(fh)
-
-def format_catalog_as_context(catalog: dict) -> str:
-    lines: list[str] = []
-    lines.append("══════════════════════════════════════")
-    lines.append("        كتالوج عطور AAA الفاخرة         ")
-    lines.append("══════════════════════════════════════\n")
-
-    for idx, perfume in enumerate(catalog["perfumes"], start=1):
-        notes = perfume["notes"]
-        lines.append(f"[{idx}] {perfume['name']}")
-        lines.append(f"    السعر        : {perfume['price_sar']} ريال سعودي")
-        lines.append(f"    رائحة البداية : {' ، '.join(notes['top'])}")
-        lines.append(f"    رائحة القلب  : {' ، '.join(notes['heart'])}")
-        lines.append(f"    رائحة القاعدة : {' ، '.join(notes['base'])}")
-        lines.append(f"    مدة الثبات   : {perfume['longevity']}\n")
-
-    policy = catalog["delivery_policy"]
-    lines.append("══════════════════════════════════════")
-    lines.append("         سياسة التوصيل                ")
-    lines.append("══════════════════════════════════════")
-    lines.append(f"  الدولة             : {policy['country']}")
-    lines.append(f"  المناطق المخدومة    : {' ، '.join(policy['regions'])}")
-    lines.append(
-        f"  التوصيل العادي     : {policy['standard_delivery_days']}"
-        f" | رسوم: {policy['standard_fee_sar']} ريال"
-    )
-    lines.append(f"  شحن مجاني من       : {policy['free_shipping_threshold_sar']} ريال فأكثر")
-    return "\n".join(lines)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # LangChain RAG pipeline with Memory
 # ─────────────────────────────────────────────────────────────────────────────
 _SYSTEM_PROMPT = """أنت "نور"، خبيرة مبيعات عطور فاخرة في متجر AAA للعطور الخليجية.
@@ -90,18 +54,18 @@ _SYSTEM_PROMPT = """أنت "نور"، خبيرة مبيعات عطور فاخر�
 
 <STRICT_RULES>
 1. تحدثي بالعربية الفصحى فقط، بأسلوب راقٍ ودافئ.
-2. لا تتحدثي عن أي موضوع خارج العطور ومتجرنا. إذا سألك العميل عن شيء آخر، قولي: "عذراً، تخصصي هو العطور الفاخرة فقط. كيف يمكنني مساعدتك في اختيار عطرك اليوم؟"
+2. لا تتحدثي عن أي موضوع خارج العطور ومتجرنا.
 3. اعتمدي حصراً على قاعدة البيانات المرفقة. لا تخترعي أسماء أو أسعار.
-4. اطرحي أسئلة لفهم ذوق العميل (مثل: هل تفضل العود الثقيل أم المسك الخفيف؟).
+4. اطرحي أسئلة لفهم ذوق العميل.
 5. إجاباتك يجب أن تكون قصيرة جداً وموجزة (لا تتجاوز 2 إلى 3 أسطر في كل رد) لتشبه المحادثات البشرية الطبيعية.
 6. لا تقترحي أكثر من عطر واحد في كل رسالة لتجنب تشتيت انتباه العميل.
 </STRICT_RULES>
 
 <THINKING_PROCESS>
 قبل الرد على العميل، يجب عليك التفكير في الآتي:
-1. نية العميل (هل يبحث عن اقتراح، يشتكي، أم جاهز للشراء؟)
-2. العطور المناسبة من قاعدة البيانات.
-3. هل اكتملت بيانات الطلب (الاسم، الهاتف، العنوان)؟
+1. نية العميل
+2. العطور المناسبة من قاعدة البيانات
+3. هل اكتملت بيانات الطلب؟
 </THINKING_PROCESS>
 
 اكتبي ردك النهائي الموجه للعميل داخل علامات <response>.
@@ -115,20 +79,18 @@ def build_rag_chain(llm: ChatGoogleGenerativeAI):
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", _SYSTEM_PROMPT),
-            MessagesPlaceholder(variable_name="history"), # هذه هي الذاكرة
+            MessagesPlaceholder(variable_name="history"),
             ("human", "{question}"),
         ]
     )
     chain = prompt | llm | StrOutputParser()
     
-    # دمج السلسلة مع نظام إدارة الجلسات
     return RunnableWithMessageHistory(
         chain,
         get_session_history,
         input_messages_key="question",
         history_messages_key="history",
     )
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pydantic models
@@ -153,16 +115,25 @@ class OrderResponse(BaseModel):
     message: str
     order_id: str
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Application lifespan (startup / shutdown)
 # ─────────────────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Starting AAA Perfume Bot …")
-    catalog = load_catalog()
-    app.state.catalog_context = format_catalog_as_context(catalog)
     
+    # 1. إعداد الـ Vector Store (HuggingFace + MongoDB)
+    app.state.sync_client = MongoClient(MONGO_URI)
+    collection = app.state.sync_client["perfume_db"]["perfumes"]
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+    
+    app.state.vector_store = MongoDBAtlasVectorSearch(
+        collection=collection,
+        embedding=embeddings,
+        index_name="vector_index"
+    )
+    
+    # 2. إعداد LLM
     llm = ChatGoogleGenerativeAI(
         model=GOOGLE_MODEL,
         temperature=0.3,
@@ -170,12 +141,14 @@ async def lifespan(app: FastAPI):
     )
     app.state.rag_chain = build_rag_chain(llm)
     
+    # 3. إعداد Motor للعمليات غير المتزامنة (حفظ الطلبات)
     app.state.mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
     app.state.db = app.state.mongo_client["perfume_db"]
+    
     print("✅ Server is ready to accept requests.\n")
     yield
     app.state.mongo_client.close()
-
+    app.state.sync_client.close()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FastAPI application
@@ -197,9 +170,18 @@ async def serve_frontend():
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, app_request: Request) -> ChatResponse:
     try:
+        # البحث الذكي: جلب أقرب عطرين لسؤال العميل
+        vector_store = app_request.app.state.vector_store
+        search_results = await vector_store.asimilarity_search(request.message, k=2)
+        
+        # دمج نتائج البحث
+        dynamic_context = "\n".join([doc.page_content for doc in search_results])
+        if not dynamic_context.strip():
+            dynamic_context = "لا توجد عطور مطابقة حالياً. اطلب من العميل توضيح طلبه أو اقترح منتجاً مشهوراً."
+
         raw_reply: str = await app_request.app.state.rag_chain.ainvoke(
             {
-                "context": app_request.app.state.catalog_context,
+                "context": dynamic_context,
                 "question": request.message,
             },
             config={"configurable": {"session_id": request.session_id}}
@@ -252,5 +234,3 @@ async def create_order(order: OrderRequest, app_request: Request) -> OrderRespon
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-
-

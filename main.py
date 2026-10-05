@@ -4,6 +4,7 @@ Stack : FastAPI · LangChain (context-stuffing RAG) · Motor (async MongoDB)
 Author: Senior Python Backend Developer
 """
 
+import re
 import json
 import certifi
 from contextlib import asynccontextmanager
@@ -84,28 +85,28 @@ def format_catalog_as_context(catalog: dict) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # LangChain RAG pipeline with Memory
 # ─────────────────────────────────────────────────────────────────────────────
-_SYSTEM_PROMPT = """\
-أنت "نور"، خبير مبيعات عطور فاخرة في متجر AAA للعطور الفاخرة الخليجية.
+_SYSTEM_PROMPT = """أنت "نور"، خبيرة مبيعات عطور فاخرة في متجر AAA للعطور الخليجية.
+مهمتك هي تقديم استشارات عطرية، فهم ذوق العميل، وإتمام عملية البيع.
 
-قواعد صارمة يجب الالتزام بها دائماً:
-١. أجب باللغة العربية الفصحى فقط، بأسلوب راقٍ ولبق يعكس فخامة المتجر.
-٢. اعتمد حصراً على المعلومات الواردة في قاعدة بيانات المتجر أدناه.
-٣. لا تختلق أسعاراً أو عطوراً أو سياسات توصيل خارج ما هو مذكور.
-٤. يمنع منعاً باتاً قول "ليس لدي معلومات" (أو ما يعادلها). بدلاً من ذلك، وجه العميل بأسلوب بيعي ذكي لما هو متاح.
-٥. لا تعتذر أبداً.
-٦. إذا سُئلت عن العطور الأكثر مبيعاً أو أفضل العطور، رشّح بثقة أغلى ٣ عطور متوفرة في الكتالوج.
-٧. لا تذكر أي اسم تقني أو نظام داخلي للعميل.
+<STRICT_RULES>
+1. تحدثي بالعربية الفصحى فقط، بأسلوب راقٍ ودافئ.
+2. لا تتحدثي عن أي موضوع خارج العطور ومتجرنا. إذا سألك العميل عن شيء آخر، قولي: "عذراً، تخصصي هو العطور الفاخرة فقط. كيف يمكنني مساعدتك في اختيار عطرك اليوم؟"
+3. اعتمدي حصراً على قاعدة البيانات المرفقة. لا تخترعي أسماء أو أسعار.
+4. اطرحي أسئلة لفهم ذوق العميل (مثل: هل تفضل العود الثقيل أم المسك الخفيف؟) بدلاً من اقتراح العطور عشوائياً.
+</STRICT_RULES>
 
-قواعد إغلاق الصفقات والمبيعات:
-- أنت مستشار مبيعات محترف. هدفك هو إقناع العميل بالشراء.
-- إذا وافق العميل على الشراء أو اختار عطراً، اطلب منه بدبلوماسية: 1. الاسم الكامل، 2. رقم الهاتف، 3. عنوان التوصيل.
-- بمجرد أن يعطيك العميل هذه المعلومات، يجب عليك التوقف عن الرد بالنص العادي، وإرجاع هذا الـ JSON فقط لا غير دون أي زيادات:
-{{"order_trigger": true, "customer_name": "الاسم", "phone": "الرقم", "address": "العنوان", "perfume_name": "اسم العطر", "total_price": السعر_بالأرقام}}
+<THINKING_PROCESS>
+قبل الرد على العميل، يجب عليك التفكير في الآتي:
+1. نية العميل (هل يبحث عن اقتراح، يشتكي، أم جاهز للشراء؟)
+2. العطور المناسبة من قاعدة البيانات.
+3. هل اكتملت بيانات الطلب (الاسم، الهاتف، العنوان)؟
+</THINKING_PROCESS>
 
-══════════════════════════════════════
-      قاعدة بيانات المتجر
-══════════════════════════════════════
-{context}
+اكتبي ردك النهائي الموجه للعميل داخل علامات <response>.
+إذا أعطاك العميل بيانات الشراء الكاملة، أضيفي بلوك <order_json> في النهاية لكي يقرأه النظام.
+
+كتالوج العطور:
+{catalog_data}
 """
 
 def build_rag_chain(llm: ChatGoogleGenerativeAI):
@@ -194,14 +195,38 @@ async def serve_frontend():
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, app_request: Request) -> ChatResponse:
     try:
-        reply: str = await app_request.app.state.rag_chain.ainvoke(
+        raw_reply: str = await app_request.app.state.rag_chain.ainvoke(
             {
                 "context": app_request.app.state.catalog_context,
                 "question": request.message,
             },
             config={"configurable": {"session_id": request.session_id}}
         )
-        return ChatResponse(reply=reply)
+        
+        response_match = re.search(r'<response>(.*?)</response>', raw_reply, re.DOTALL | re.IGNORECASE)
+        clean_text = response_match.group(1).strip() if response_match else raw_reply
+        
+        order_data = {}
+        order_match = re.search(r'<order_json>(.*?)</order_json>', raw_reply, re.DOTALL | re.IGNORECASE)
+        if order_match:
+            try:
+                order_data = json.loads(order_match.group(1).strip())
+            except Exception as e:
+                print(f"Failed to parse order JSON: {e}")
+                pass
+                
+        final_output = {
+            "reply": clean_text,
+            "order_trigger": order_data.get("order_trigger", False),
+            "customer_name": order_data.get("customer_name", ""),
+            "phone": order_data.get("phone", ""),
+            "address": order_data.get("address", ""),
+            "perfume_name": order_data.get("perfume_name", ""),
+            "total_price": order_data.get("total_price", 0)
+        }
+        
+        return ChatResponse(reply=json.dumps(final_output))
+        
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"خطأ داخلي: {exc}") from exc
 

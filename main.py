@@ -132,9 +132,9 @@ def build_rag_chain(llm: ChatGoogleGenerativeAI):
 # Pydantic models
 # ─────────────────────────────────────────────────────────────────────────────
 class ChatRequest(BaseModel):
-    message: str
-    client_id: str  
-    session_id: str 
+    message: str = Field(..., max_length=300)
+    client_id: str
+    session_id: str
 
 class ChatResponse(BaseModel):
     reply: str = Field(..., description="رد المساعد الذكي")

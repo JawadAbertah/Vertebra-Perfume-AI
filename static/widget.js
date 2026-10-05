@@ -1,6 +1,8 @@
 (function() {
     const BASE_URL = "https://vertebra-perfume-ai.onrender.com";
 
+    fetch(`${BASE_URL}/docs`).catch(() => console.log("Waking up Render..."));
+
     const styles = `
         #vertebra-chat-widget { position: fixed; bottom: 20px; right: 20px; z-index: 999999; display: flex; flex-direction: column; align-items: flex-end; font-family: 'Tajawal', sans-serif; }
         #vertebra-chat-window { width: 380px; height: 600px; background: white; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.15); overflow: hidden; display: none; margin-bottom: 15px; border: 1px solid #EAEAEA; transition: all 0.3s ease; }

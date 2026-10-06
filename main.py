@@ -24,8 +24,7 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 
-# مكتبات RAG الجديدة
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_mongodb import MongoDBAtlasVectorSearch
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -125,7 +124,7 @@ async def lifespan(app: FastAPI):
     # 1. إعداد الـ Vector Store (HuggingFace + MongoDB)
     app.state.sync_client = MongoClient(MONGO_URI)
     collection = app.state.sync_client["perfume_db"]["perfumes"]
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
     
     app.state.vector_store = MongoDBAtlasVectorSearch(
         collection=collection,

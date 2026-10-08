@@ -100,8 +100,7 @@ async def lifespan(app: FastAPI):
     app.state.sync_client = MongoClient(MONGO_URI)
     collection = app.state.sync_client["perfume_db"]["perfumes"]
     
-    # استخدام المكتبة الرسمية بدلاً من REST API
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     
     app.state.vector_store = MongoDBAtlasVectorSearch(
         collection=collection,
@@ -136,7 +135,7 @@ async def serve_frontend():
 async def seed_database(request: Request):
     try:
         collection = request.app.state.sync_client["perfume_db"]["perfumes"]
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
         
         with open("catalog.json", "r", encoding="utf-8") as f:
             catalog_data = json.load(f)

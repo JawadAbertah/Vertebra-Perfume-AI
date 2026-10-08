@@ -16,7 +16,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from pydantic import BaseModel, Field
@@ -100,7 +101,8 @@ async def lifespan(app: FastAPI):
     app.state.sync_client = MongoClient(MONGO_URI)
     collection = app.state.sync_client["perfume_db"]["perfumes"]
     
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    # استخدام FastEmbed الخفيف (بدون PyTorch وبدون API)
+    embeddings = FastEmbedEmbeddings()
     
     app.state.vector_store = MongoDBAtlasVectorSearch(
         collection=collection,
@@ -108,6 +110,7 @@ async def lifespan(app: FastAPI):
         index_name="vector_index"
     )
     
+    # الدردشة باقية بـ Google حيت خدامة مزيان
     llm = ChatGoogleGenerativeAI(model=GOOGLE_MODEL, temperature=0.3)
     app.state.rag_chain = build_rag_chain(llm)
     
@@ -128,14 +131,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def serve_frontend():
     return FileResponse("static/index.html")
 
-# -----------------------------------------------------------------------------
-# THE MAGIC ROUTE: الرفع من السيرفر مباشرة لتفادي مشاكل بايثون 3.9
-# -----------------------------------------------------------------------------
 @app.get("/seed")
 async def seed_database(request: Request):
     try:
         collection = request.app.state.sync_client["perfume_db"]["perfumes"]
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+        embeddings = FastEmbedEmbeddings()
         
         with open("catalog.json", "r", encoding="utf-8") as f:
             catalog_data = json.load(f)

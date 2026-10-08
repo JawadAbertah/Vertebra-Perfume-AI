@@ -1,5 +1,5 @@
 """
-main.py — AAA Luxury Perfume Bot
+main.py — AAA Luxury Perfume Bot (Direct Context Architecture)
 """
 import re
 import json
@@ -8,22 +8,18 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import os
 
-from pymongo import MongoClient
 import motor.motor_asyncio
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
-from langchain_mongodb import MongoDBAtlasVectorSearch
-from langchain_core.documents import Document
 
 load_dotenv()
 
@@ -38,6 +34,20 @@ def get_session_history(session_id: str) -> ChatMessageHistory:
         store[session_id] = ChatMessageHistory()
     return store[session_id]
 
+# الكود الجديد كيقرا الملف بدقة انطلاقاً من المسار الحقيقي ديالو
+def get_catalog_text():
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        catalog_path = os.path.join(base_dir, "catalog.json")
+        with open(catalog_path, "r", encoding="utf-8") as f:
+            catalog_items = json.load(f)
+        if not catalog_items:
+            return "الكتالوج فارغ."
+        return "\n".join([f"- اسم العطر: {item.get('name', 'غير معروف')}, السعر: {item.get('price', 0)} ريال. الوصف: {item.get('description', '')}" for item in catalog_items])
+    except Exception as e:
+        return f"حدث خطأ أثناء قراءة الكتالوج: {str(e)}"
+
+# تحييد المشاكل ديال الأقواس {{ }} مع LangChain
 _SYSTEM_PROMPT = """أنت "نور"، خبيرة مبيعات عطور فاخرة في متجر AAA للعطور الخليجية.
 مهمتك هي تقديم استشارات عطرية، فهم ذوق العميل، وإتمام عملية البيع.
 
@@ -46,7 +56,7 @@ _SYSTEM_PROMPT = """أنت "نور"، خبيرة مبيعات عطور فاخر�
 2. لا تتحدثي عن أي موضوع خارج العطور ومتجرنا.
 3. اعتمدي حصراً على قاعدة البيانات المرفقة. لا تخترعي أسماء أو أسعار.
 4. اطرحي أسئلة لفهم ذوق العميل.
-5. إجاباتك يجب أن تكون قصيرة جداً وموجزة.
+5. إجاباتك يجب أن تكون قصيرة جداً وموجزة (لا تتجاوز 2 إلى 3 أسطر).
 6. لا تقترحي أكثر من عطر واحد في كل رسالة لتجنب تشتيت انتباه العميل.
 </STRICT_RULES>
 
@@ -58,10 +68,13 @@ _SYSTEM_PROMPT = """أنت "نور"، خبيرة مبيعات عطور فاخر�
 </THINKING_PROCESS>
 
 اكتبي ردك النهائي الموجه للعميل داخل علامات <response>.
-إذا أعطاك العميل بيانات الشراء الكاملة، أضيفي بلوك <order_json> في النهاية لكي يقرأه النظام.
+إذا أعطاك العميل بيانات الشراء الكاملة، أضيفي بلوك <order_json> في النهاية لكي يقرأه النظام بالشكل التالي:
+<order_json>
+{{"order_trigger": true, "customer_name": "الاسم", "phone": "الرقم", "address": "المدينة", "perfume_name": "اسم العطر", "total_price": السعر}}
+</order_json>
 
-كتالوج العطور:
-{context}
+كتالوج العطور المتاحة لدينا (اعتمدي عليه حصراً للرد على أسئلة العميل):
+{catalog}
 """
 
 def build_rag_chain(llm):
@@ -98,27 +111,13 @@ class OrderResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.sync_client = MongoClient(MONGO_URI)
-    collection = app.state.sync_client["perfume_db"]["perfumes"]
-    
-    # استخدام FastEmbed الخفيف (بدون PyTorch وبدون API)
-    embeddings = FastEmbedEmbeddings()
-    
-    app.state.vector_store = MongoDBAtlasVectorSearch(
-        collection=collection,
-        embedding=embeddings,
-        index_name="vector_index"
-    )
-    
-    # الدردشة باقية بـ Google حيت خدامة مزيان
-    llm = ChatGoogleGenerativeAI(model=GOOGLE_MODEL, temperature=0.3)
+    llm = ChatGoogleGenerativeAI(model=GOOGLE_MODEL, temperature=0.3, google_api_key=GOOGLE_API_KEY)
     app.state.rag_chain = build_rag_chain(llm)
     
     app.state.mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
     app.state.db = app.state.mongo_client["perfume_db"]
     yield
     app.state.mongo_client.close()
-    app.state.sync_client.close()
 
 app = FastAPI(title="AAA Luxury Perfume Bot API", lifespan=lifespan)
 app.add_middleware(
@@ -131,47 +130,14 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def serve_frontend():
     return FileResponse("static/index.html")
 
-@app.get("/seed")
-async def seed_database(request: Request):
-    try:
-        collection = request.app.state.sync_client["perfume_db"]["perfumes"]
-        embeddings = FastEmbedEmbeddings()
-        
-        with open("catalog.json", "r", encoding="utf-8") as f:
-            catalog_data = json.load(f)
-
-        documents = []
-        for item in catalog_data:
-            text_content = f"اسم العطر: {item['name']}. السعر: {item['price']}. الوصف: {item.get('description', '')}"
-            doc = Document(
-                page_content=text_content, 
-                metadata={"name": item['name'], "price": item['price']}
-            )
-            documents.append(doc)
-        
-        collection.delete_many({})
-        MongoDBAtlasVectorSearch.from_documents(
-            documents=documents,
-            embedding=embeddings,
-            collection=collection,
-            index_name="vector_index"
-        )
-        return JSONResponse({"status": "success", "message": "تم رفع العطور إلى MongoDB بنجاح!"})
-    except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)})
-
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, app_request: Request):
     try:
-        vector_store = app_request.app.state.vector_store
-        search_results = await vector_store.asimilarity_search(request.message, k=2)
+        # قراءة العطور تتدار مع كل رسالة باش نضمنو بلي البوت عندو الكتالوج كامل
+        catalog_text = get_catalog_text()
         
-        dynamic_context = "\n".join([doc.page_content for doc in search_results])
-        if not dynamic_context.strip():
-            dynamic_context = "لا توجد عطور مطابقة حالياً."
-
         raw_reply: str = await app_request.app.state.rag_chain.ainvoke(
-            {"context": dynamic_context, "question": request.message},
+            {"question": request.message, "catalog": catalog_text},
             config={"configurable": {"session_id": request.session_id}}
         )
         

@@ -1,8 +1,6 @@
 """
 main.py — AAA Luxury Perfume Bot
-Stack : FastAPI · LangChain (HuggingFace RAG) · Motor (async MongoDB)
 """
-
 import re
 import json
 import certifi
@@ -15,29 +13,23 @@ import motor.motor_asyncio
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
-
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_mongodb import MongoDBAtlasVectorSearch
+from langchain_core.documents import Document
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Environment & constants
-# ─────────────────────────────────────────────────────────────────────────────
 load_dotenv()
 
-# استخدام MONGO_URI كما طلبت
-MONGO_URI: str = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
-GOOGLE_MODEL: str = "gemini-3.1-flash-lite"
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+GOOGLE_MODEL = "gemini-3.1-flash-lite"
 
-# ذاكرة تخزين الجلسات (In-memory store for chat history)
 store = {}
 
 def get_session_history(session_id: str) -> ChatMessageHistory:
@@ -45,9 +37,6 @@ def get_session_history(session_id: str) -> ChatMessageHistory:
         store[session_id] = ChatMessageHistory()
     return store[session_id]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LangChain RAG pipeline with Memory
-# ─────────────────────────────────────────────────────────────────────────────
 _SYSTEM_PROMPT = """أنت "نور"، خبيرة مبيعات عطور فاخرة في متجر AAA للعطور الخليجية.
 مهمتك هي تقديم استشارات عطرية، فهم ذوق العميل، وإتمام عملية البيع.
 
@@ -56,7 +45,7 @@ _SYSTEM_PROMPT = """أنت "نور"، خبيرة مبيعات عطور فاخر�
 2. لا تتحدثي عن أي موضوع خارج العطور ومتجرنا.
 3. اعتمدي حصراً على قاعدة البيانات المرفقة. لا تخترعي أسماء أو أسعار.
 4. اطرحي أسئلة لفهم ذوق العميل.
-5. إجاباتك يجب أن تكون قصيرة جداً وموجزة (لا تتجاوز 2 إلى 3 أسطر في كل رد) لتشبه المحادثات البشرية الطبيعية.
+5. إجاباتك يجب أن تكون قصيرة جداً وموجزة.
 6. لا تقترحي أكثر من عطر واحد في كل رسالة لتجنب تشتيت انتباه العميل.
 </STRICT_RULES>
 
@@ -74,57 +63,45 @@ _SYSTEM_PROMPT = """أنت "نور"، خبيرة مبيعات عطور فاخر�
 {context}
 """
 
-def build_rag_chain(llm: ChatGoogleGenerativeAI):
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", _SYSTEM_PROMPT),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{question}"),
-        ]
-    )
+def build_rag_chain(llm):
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", _SYSTEM_PROMPT),
+        MessagesPlaceholder(variable_name="history"),
+        ("human", "{question}"),
+    ])
     chain = prompt | llm | StrOutputParser()
-    
     return RunnableWithMessageHistory(
-        chain,
-        get_session_history,
-        input_messages_key="question",
-        history_messages_key="history",
+        chain, get_session_history,
+        input_messages_key="question", history_messages_key="history",
     )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Pydantic models
-# ─────────────────────────────────────────────────────────────────────────────
 class ChatRequest(BaseModel):
     message: str = Field(..., max_length=300)
     client_id: str
     session_id: str
 
 class ChatResponse(BaseModel):
-    reply: str = Field(..., description="رد المساعد الذكي")
+    reply: str
 
 class OrderRequest(BaseModel):
-    customer_name: str = Field(..., description="اسم العميل الكامل")
-    phone_number: str = Field(..., description="رقم الجوال")
-    city: str = Field(..., description="المدينة")
-    perfume_name: str = Field(..., description="اسم العطر المطلوب")
-    total_price: float = Field(..., gt=0, description="السعر الإجمالي بالريال")
+    customer_name: str
+    phone_number: str
+    city: str
+    perfume_name: str
+    total_price: float
 
 class OrderResponse(BaseModel):
     success: bool
     message: str
     order_id: str
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Application lifespan (startup / shutdown)
-# ─────────────────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 Starting AAA Perfume Bot …")
-    
-    # 1. إعداد الـ Vector Store (HuggingFace + MongoDB)
     app.state.sync_client = MongoClient(MONGO_URI)
     collection = app.state.sync_client["perfume_db"]["perfumes"]
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    
+    # استخدام المكتبة الرسمية بدلاً من REST API
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
     
     app.state.vector_store = MongoDBAtlasVectorSearch(
         collection=collection,
@@ -132,57 +109,70 @@ async def lifespan(app: FastAPI):
         index_name="vector_index"
     )
     
-    # 2. إعداد LLM
-    llm = ChatGoogleGenerativeAI(
-        model=GOOGLE_MODEL,
-        temperature=0.3,
-        google_api_key=GOOGLE_API_KEY,
-    )
+    llm = ChatGoogleGenerativeAI(model=GOOGLE_MODEL, temperature=0.3)
     app.state.rag_chain = build_rag_chain(llm)
     
-    # 3. إعداد Motor للعمليات غير المتزامنة (حفظ الطلبات)
     app.state.mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
     app.state.db = app.state.mongo_client["perfume_db"]
-    
-    print("✅ Server is ready to accept requests.\n")
     yield
     app.state.mongo_client.close()
     app.state.sync_client.close()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# FastAPI application
-# ─────────────────────────────────────────────────────────────────────────────
 app = FastAPI(title="AAA Luxury Perfume Bot API", lifespan=lifespan)
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    CORSMiddleware, allow_origins=["*"], allow_credentials=True,
+    allow_methods=["*"], allow_headers=["*"],
 )
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/", summary="Serve modern HTML SaaS Widget")
+@app.get("/")
 async def serve_frontend():
     return FileResponse("static/index.html")
 
-@app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, app_request: Request) -> ChatResponse:
+# -----------------------------------------------------------------------------
+# THE MAGIC ROUTE: الرفع من السيرفر مباشرة لتفادي مشاكل بايثون 3.9
+# -----------------------------------------------------------------------------
+@app.get("/seed")
+async def seed_database(request: Request):
     try:
-        # البحث الذكي: جلب أقرب عطرين لسؤال العميل
+        collection = request.app.state.sync_client["perfume_db"]["perfumes"]
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+        
+        with open("catalog.json", "r", encoding="utf-8") as f:
+            catalog_data = json.load(f)
+
+        documents = []
+        for item in catalog_data:
+            text_content = f"اسم العطر: {item['name']}. السعر: {item['price']}. الوصف: {item.get('description', '')}"
+            doc = Document(
+                page_content=text_content, 
+                metadata={"name": item['name'], "price": item['price']}
+            )
+            documents.append(doc)
+        
+        collection.delete_many({})
+        MongoDBAtlasVectorSearch.from_documents(
+            documents=documents,
+            embedding=embeddings,
+            collection=collection,
+            index_name="vector_index"
+        )
+        return JSONResponse({"status": "success", "message": "تم رفع العطور إلى MongoDB بنجاح!"})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)})
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest, app_request: Request):
+    try:
         vector_store = app_request.app.state.vector_store
         search_results = await vector_store.asimilarity_search(request.message, k=2)
         
-        # دمج نتائج البحث
         dynamic_context = "\n".join([doc.page_content for doc in search_results])
         if not dynamic_context.strip():
-            dynamic_context = "لا توجد عطور مطابقة حالياً. اطلب من العميل توضيح طلبه أو اقترح منتجاً مشهوراً."
+            dynamic_context = "لا توجد عطور مطابقة حالياً."
 
         raw_reply: str = await app_request.app.state.rag_chain.ainvoke(
-            {
-                "context": dynamic_context,
-                "question": request.message,
-            },
+            {"context": dynamic_context, "question": request.message},
             config={"configurable": {"session_id": request.session_id}}
         )
         
@@ -192,11 +182,8 @@ async def chat(request: ChatRequest, app_request: Request) -> ChatResponse:
         order_data = {}
         order_match = re.search(r'<order_json>(.*?)</order_json>', raw_reply, re.DOTALL | re.IGNORECASE)
         if order_match:
-            try:
-                order_data = json.loads(order_match.group(1).strip())
-            except Exception as e:
-                print(f"Failed to parse order JSON: {e}")
-                pass
+            try: order_data = json.loads(order_match.group(1).strip())
+            except: pass
                 
         final_output = {
             "reply": clean_text,
@@ -207,29 +194,16 @@ async def chat(request: ChatRequest, app_request: Request) -> ChatResponse:
             "perfume_name": order_data.get("perfume_name", ""),
             "total_price": order_data.get("total_price", 0)
         }
-        
         return ChatResponse(reply=json.dumps(final_output))
         
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"خطأ داخلي: {exc}") from exc
+        raise HTTPException(status_code=500, detail=str(exc))
 
 @app.post("/order", response_model=OrderResponse, status_code=201)
-async def create_order(order: OrderRequest, app_request: Request) -> OrderResponse:
+async def create_order(order: OrderRequest, app_request: Request):
     try:
-        order_doc: dict = {
-            **order.model_dump(),
-            "status": "pending",
-            "created_at": datetime.now(timezone.utc),
-        }
+        order_doc = {**order.model_dump(), "status": "pending", "created_at": datetime.now(timezone.utc)}
         result = await app_request.app.state.db["orders"].insert_one(order_doc)
-        return OrderResponse(
-            success=True,
-            message="تم استلام طلبك بنجاح!",
-            order_id=str(result.inserted_id),
-        )
+        return OrderResponse(success=True, message="تم الاستلام", order_id=str(result.inserted_id))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"فشل في حفظ الطلب: {exc}") from exc
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+        raise HTTPException(status_code=500, detail=str(exc))

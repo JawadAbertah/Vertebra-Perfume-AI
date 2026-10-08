@@ -102,7 +102,7 @@ async def lifespan(app: FastAPI):
     collection = app.state.sync_client["perfume_db"]["perfumes"]
     
     # استخدام FastEmbed الخفيف (بدون PyTorch وبدون API)
-    embeddings = FastEmbedEmbeddings()
+    embeddings = FastEmbedEmbeddings(model_name="intfloat/multilingual-e5-small")
     
     app.state.vector_store = MongoDBAtlasVectorSearch(
         collection=collection,
@@ -135,7 +135,7 @@ async def serve_frontend():
 async def seed_database(request: Request):
     try:
         collection = request.app.state.sync_client["perfume_db"]["perfumes"]
-        embeddings = FastEmbedEmbeddings()
+        embeddings = FastEmbedEmbeddings(model_name="intfloat/multilingual-e5-small")
         
         with open("catalog.json", "r", encoding="utf-8") as f:
             catalog_data = json.load(f)

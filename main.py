@@ -1,5 +1,5 @@
 """
-main.py — AAA Luxury Perfume Bot (Direct Context Architecture)
+main.py — AAA Luxury Perfume Bot (Direct Context Architecture - Fixed JSON Leak)
 """
 import re
 import json
@@ -34,7 +34,6 @@ def get_session_history(session_id: str) -> ChatMessageHistory:
         store[session_id] = ChatMessageHistory()
     return store[session_id]
 
-# الكود الجديد كيقرا الملف بدقة انطلاقاً من المسار الحقيقي ديالو
 def get_catalog_text():
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -47,33 +46,24 @@ def get_catalog_text():
     except Exception as e:
         return f"حدث خطأ أثناء قراءة الكتالوج: {str(e)}"
 
-# تحييد المشاكل ديال الأقواس {{ }} مع LangChain
+# Prompt صارم جداً
 _SYSTEM_PROMPT = """أنت "نور"، خبيرة مبيعات عطور فاخرة في متجر AAA للعطور الخليجية.
 مهمتك هي تقديم استشارات عطرية، فهم ذوق العميل، وإتمام عملية البيع.
 
 <STRICT_RULES>
 1. تحدثي بالعربية الفصحى فقط، بأسلوب راقٍ ودافئ.
 2. لا تتحدثي عن أي موضوع خارج العطور ومتجرنا.
-3. اعتمدي حصراً على قاعدة البيانات المرفقة. لا تخترعي أسماء أو أسعار.
-4. اطرحي أسئلة لفهم ذوق العميل.
-5. إجاباتك يجب أن تكون قصيرة جداً وموجزة (لا تتجاوز 2 إلى 3 أسطر).
-6. لا تقترحي أكثر من عطر واحد في كل رسالة لتجنب تشتيت انتباه العميل.
+3. اعتمدي حصراً على الكتالوج المرفق. لا تخترعي أسماء أو أسعار.
+4. إجاباتك يجب أن تكون قصيرة وموجزة جداً.
+5. إجباري جداً: ضعي ردك النصي الموجه للعميل دائماً داخل علامات <response> هنا الرد </response>.
 </STRICT_RULES>
 
-<THINKING_PROCESS>
-قبل الرد على العميل، يجب عليك التفكير في الآتي:
-1. نية العميل
-2. العطور المناسبة من قاعدة البيانات
-3. هل اكتملت بيانات الطلب؟
-</THINKING_PROCESS>
-
-اكتبي ردك النهائي الموجه للعميل داخل علامات <response>.
-إذا أعطاك العميل بيانات الشراء الكاملة، أضيفي بلوك <order_json> في النهاية لكي يقرأه النظام بالشكل التالي:
+إذا أعطاك العميل بيانات الشراء الكاملة (الاسم، المدينة، الهاتف، العطر)، يجب عليك إضافة هذا البلوك في نهاية رسالتك تماماً ليقرأه النظام:
 <order_json>
 {{"order_trigger": true, "customer_name": "الاسم", "phone": "الرقم", "address": "المدينة", "perfume_name": "اسم العطر", "total_price": السعر}}
 </order_json>
 
-كتالوج العطور المتاحة لدينا (اعتمدي عليه حصراً للرد على أسئلة العميل):
+كتالوج العطور المتاحة لدينا:
 {catalog}
 """
 
@@ -113,7 +103,6 @@ class OrderResponse(BaseModel):
 async def lifespan(app: FastAPI):
     llm = ChatGoogleGenerativeAI(model=GOOGLE_MODEL, temperature=0.3, google_api_key=GOOGLE_API_KEY)
     app.state.rag_chain = build_rag_chain(llm)
-    
     app.state.mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
     app.state.db = app.state.mongo_client["perfume_db"]
     yield
@@ -133,22 +122,31 @@ async def serve_frontend():
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, app_request: Request):
     try:
-        # قراءة العطور تتدار مع كل رسالة باش نضمنو بلي البوت عندو الكتالوج كامل
         catalog_text = get_catalog_text()
-        
         raw_reply: str = await app_request.app.state.rag_chain.ainvoke(
             {"question": request.message, "catalog": catalog_text},
             config={"configurable": {"session_id": request.session_id}}
         )
         
-        response_match = re.search(r'<response>(.*?)</response>', raw_reply, re.DOTALL | re.IGNORECASE)
-        clean_text = response_match.group(1).strip() if response_match else raw_reply
-        
+        # 1. استخراج الـ JSON (حتى لو لم يضع البوت علامات order_json)
         order_data = {}
-        order_match = re.search(r'<order_json>(.*?)</order_json>', raw_reply, re.DOTALL | re.IGNORECASE)
-        if order_match:
-            try: order_data = json.loads(order_match.group(1).strip())
-            except: pass
+        json_match = re.search(r'(\{.*"order_trigger".*\})', raw_reply, re.DOTALL | re.IGNORECASE)
+        if json_match:
+            try: 
+                order_data = json.loads(json_match.group(1).strip())
+            except: 
+                pass
+                
+        # 2. تنظيف الرد النصي من أي كود برمجي باش ما يبانش للكليان
+        clean_text = raw_reply
+        response_match = re.search(r'<response>(.*?)</response>', raw_reply, re.DOTALL | re.IGNORECASE)
+        if response_match:
+            clean_text = response_match.group(1).strip()
+        else:
+            # فلتر احتياطي: إذا نسى البوت العلامات، نمسح كود JSON يدوياً من النص
+            clean_text = re.sub(r'<order_json>.*?</order_json>', '', clean_text, flags=re.DOTALL | re.IGNORECASE)
+            clean_text = re.sub(r'(\{.*"order_trigger".*\})', '', clean_text, flags=re.DOTALL | re.IGNORECASE)
+            clean_text = clean_text.replace("```json", "").replace("```", "").strip()
                 
         final_output = {
             "reply": clean_text,

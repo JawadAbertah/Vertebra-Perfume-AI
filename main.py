@@ -1,5 +1,5 @@
 """
-main.py — AAA Luxury Perfume Bot (Direct Context Architecture - Fixed JSON Leak)
+main.py — AAA Luxury Perfume Bot (Strict JSON Architecture)
 """
 import re
 import json
@@ -46,24 +46,29 @@ def get_catalog_text():
     except Exception as e:
         return f"حدث خطأ أثناء قراءة الكتالوج: {str(e)}"
 
-# Prompt صارم جداً
+# Prompt صارم جداً يفرض إخراج JSON فقط بدون أي نص إضافي
 _SYSTEM_PROMPT = """أنت "نور"، خبيرة مبيعات عطور فاخرة في متجر AAA للعطور الخليجية.
 مهمتك هي تقديم استشارات عطرية، فهم ذوق العميل، وإتمام عملية البيع.
 
-<STRICT_RULES>
-1. تحدثي بالعربية الفصحى فقط، بأسلوب راقٍ ودافئ.
-2. لا تتحدثي عن أي موضوع خارج العطور ومتجرنا.
-3. اعتمدي حصراً على الكتالوج المرفق. لا تخترعي أسماء أو أسعار.
-4. إجاباتك يجب أن تكون قصيرة وموجزة جداً.
-5. إجباري جداً: ضعي ردك النصي الموجه للعميل دائماً داخل علامات <response> هنا الرد </response>.
-</STRICT_RULES>
+<CRITICAL_RULE>
+يجب أن يكون ردك دائماً وأبداً بصيغة JSON فقط. ممنوع كتابة أي نص خارج الـ JSON.
+يجب أن تستخدمي هذا الهيكل بالضبط (يجب أن يكون JSON صحيحاً):
+{{
+  "reply": "هنا تكتبين ردك النصي للعميل بالعربية الفصحى وبشكل موجز جداً ودافئ.",
+  "order_data": {{
+    "order_trigger": true_or_false,
+    "customer_name": "اسم العميل إن وجد",
+    "phone": "رقم الهاتف إن وجد",
+    "address": "المدينة إن وجدت",
+    "perfume_name": "اسم العطر إن وجد",
+    "total_price": السعر_كرقم
+  }}
+}}
+- إذا لم يكتمل الطلب (العميل يسأل فقط)، اجعلي order_trigger بقيمة false واتركي باقي الحقول فارغة.
+- إذا أعطاك العميل معلومات الشراء (الاسم، الهاتف، المدينة، العطر)، اجعلي order_trigger بقيمة true واملئي البيانات.
+</CRITICAL_RULE>
 
-إذا أعطاك العميل بيانات الشراء الكاملة (الاسم، المدينة، الهاتف، العطر)، يجب عليك إضافة هذا البلوك في نهاية رسالتك تماماً ليقرأه النظام:
-<order_json>
-{{"order_trigger": true, "customer_name": "الاسم", "phone": "الرقم", "address": "المدينة", "perfume_name": "اسم العطر", "total_price": السعر}}
-</order_json>
-
-كتالوج العطور المتاحة لدينا:
+كتالوج العطور المتاحة لدينا (اعتمدي عليه حصراً):
 {catalog}
 """
 
@@ -101,7 +106,8 @@ class OrderResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    llm = ChatGoogleGenerativeAI(model=GOOGLE_MODEL, temperature=0.3, google_api_key=GOOGLE_API_KEY)
+    # خفضنا الـ temperature لـ 0.1 لضمان التزام الذكاء الاصطناعي بالأوامر وتفادي الهلوسة
+    llm = ChatGoogleGenerativeAI(model=GOOGLE_MODEL, temperature=0.1, google_api_key=GOOGLE_API_KEY)
     app.state.rag_chain = build_rag_chain(llm)
     app.state.mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
     app.state.db = app.state.mongo_client["perfume_db"]
@@ -128,34 +134,39 @@ async def chat(request: ChatRequest, app_request: Request):
             config={"configurable": {"session_id": request.session_id}}
         )
         
-        # 1. استخراج الـ JSON (حتى لو لم يضع البوت علامات order_json)
-        order_data = {}
-        json_match = re.search(r'(\{.*"order_trigger".*\})', raw_reply, re.DOTALL | re.IGNORECASE)
-        if json_match:
-            try: 
-                order_data = json.loads(json_match.group(1).strip())
-            except: 
-                pass
-                
-        # 2. تنظيف الرد النصي من أي كود برمجي باش ما يبانش للكليان
-        clean_text = raw_reply
-        response_match = re.search(r'<response>(.*?)</response>', raw_reply, re.DOTALL | re.IGNORECASE)
-        if response_match:
-            clean_text = response_match.group(1).strip()
-        else:
-            # فلتر احتياطي: إذا نسى البوت العلامات، نمسح كود JSON يدوياً من النص
-            clean_text = re.sub(r'<order_json>.*?</order_json>', '', clean_text, flags=re.DOTALL | re.IGNORECASE)
-            clean_text = re.sub(r'(\{.*"order_trigger".*\})', '', clean_text, flags=re.DOTALL | re.IGNORECASE)
-            clean_text = clean_text.replace("```json", "").replace("```", "").strip()
+        # 1. تنظيف الرد من علامات Markdown لي كيزيدها Gemini
+        json_str = raw_reply.replace("```json", "").replace("```", "").strip()
+        
+        # 2. استخراج كود الـ JSON فقط في حالة البوت زاد شي نص بالخطأ
+        match = re.search(r'(\{.*\})', json_str, re.DOTALL)
+        if match:
+            json_str = match.group(1)
+            
+        # 3. فصل النص عن البيانات بأمان تام
+        try:
+            bot_data = json.loads(json_str)
+            clean_text = bot_data.get("reply", "تم استلام طلبك شكراً لك.")
+            order_info = bot_data.get("order_data", {})
+            if not isinstance(order_info, dict):
+                order_info = {}
+        except Exception as parse_error:
+            # Fallback قوي: في حالة فشل التحليل، نمسح أي كود برمجي ونعرض النص فقط
+            print("JSON Parsing Error:", parse_error)
+            clean_text = raw_reply
+            clean_text = re.sub(r'\{.*?\}', '', clean_text, flags=re.DOTALL)
+            clean_text = clean_text.replace('"', '').replace('```', '').strip()
+            if not clean_text:
+                clean_text = "تم الاستلام بنجاح، فريقنا سيتواصل معك قريباً."
+            order_info = {}
                 
         final_output = {
             "reply": clean_text,
-            "order_trigger": order_data.get("order_trigger", False),
-            "customer_name": order_data.get("customer_name", ""),
-            "phone": order_data.get("phone", ""),
-            "address": order_data.get("address", ""),
-            "perfume_name": order_data.get("perfume_name", ""),
-            "total_price": order_data.get("total_price", 0)
+            "order_trigger": order_info.get("order_trigger", False),
+            "customer_name": order_info.get("customer_name", ""),
+            "phone": order_info.get("phone", ""),
+            "address": order_info.get("address", ""),
+            "perfume_name": order_info.get("perfume_name", ""),
+            "total_price": order_info.get("total_price", 0)
         }
         return ChatResponse(reply=json.dumps(final_output))
         

@@ -7,106 +7,23 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
+        body { overflow: hidden; margin: 0; padding: 0; }
+        
+        .markdown-content p { margin-bottom: 0.5rem; }
+        .markdown-content p:last-child { margin-bottom: 0; }
+        .markdown-content strong { font-weight: 700; color: #1f2937; }
+        .markdown-content ul, .markdown-content ol { margin-right: 1rem; margin-bottom: 0.5rem; padding-inline-start: 1rem; }
+        .markdown-content li { list-style-type: disc; margin-bottom: 0.25rem; }
+        
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
-
-:root {
-    --brand-black: #0f0f11;
-    --brand-charcoal: #1c1c1f;
-    --brand-gold: #d4af37;
-    --brand-gold-hover: #e5c358;
-    --text-light: #f8f9fa;
-    --text-dark: #121212;
-    --border-subtle: #2d2d33;
-}
-
-.chat-container {
-    font-family: 'Tajawal', sans-serif;
-    background-color: var(--brand-charcoal);
-    border: 1px solid var(--brand-gold);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
-    border-radius: 12px; 
-    overflow: hidden;
-}
-
-.chat-header {
-    background-color: var(--brand-black);
-    color: var(--brand-gold);
-    border-bottom: 1px solid var(--border-subtle);
-    padding: 16px;
-    font-weight: 700;
-    text-align: center;
-    letter-spacing: 0.5px;
-}
-
-.chat-messages {
-    background-color: var(--brand-charcoal);
-    padding: 20px;
-}
-
-.bot-message {
-    background-color: var(--brand-black);
-    color: var(--text-light);
-    border: 1px solid var(--border-subtle);
-    border-radius: 12px 12px 0 12px;
-    padding: 12px 16px;
-    margin-bottom: 15px;
-    font-weight: 400;
-    line-height: 1.6;
-}
-
-.user-message {
-    background-color: var(--brand-gold);
-    color: var(--text-dark);
-    border-radius: 12px 12px 12px 0;
-    padding: 12px 16px;
-    margin-bottom: 15px;
-    font-weight: 500;
-    box-shadow: 0 4px 10px rgba(212, 175, 55, 0.2);
-}
-
-.chat-input-container {
-    background-color: var(--brand-black);
-    border-top: 1px solid var(--border-subtle);
-    padding: 12px;
-}
-
-.chat-input {
-    background-color: var(--brand-charcoal);
-    color: var(--text-light);
-    border: 1px solid var(--border-subtle);
-    border-radius: 8px;
-    padding: 10px;
-    font-family: 'Tajawal', sans-serif;
-}
-
-.chat-input:focus {
-    outline: none;
-    border-color: var(--brand-gold);
-}
-
-.send-button {
-    background-color: var(--brand-gold);
-    color: var(--text-dark);
-    border-radius: 8px;
-    font-weight: 700;
-    transition: all 0.3s ease;
-}
-
-.send-button:hover {
-    background-color: var(--brand-gold-hover);
-    box-shadow: 0 0 15px rgba(212, 175, 55, 0.4);
-}
-
-::-webkit-scrollbar {
-    width: 6px;
-}
-::-webkit-scrollbar-track {
-    background: var(--brand-charcoal);
-}
-::-webkit-scrollbar-thumb {
-    background: var(--brand-gold);
-    border-radius: 3px;
-}
+        body { font-family: 'Tajawal', sans-serif; background-color: transparent; }
+        
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .vertebra-bg { background-color: #9B26B6; }
+        .vertebra-text { color: #9B26B6; }
+        .vertebra-border { border-color: #9B26B6; }
     </style>
 </head>
 <body class="flex items-center justify-center h-screen w-screen m-0 bg-transparent">

@@ -5,11 +5,11 @@
 
     const styles = `
         #vertebra-chat-widget { position: fixed; bottom: 20px; right: 20px; z-index: 999999; display: flex; flex-direction: column; align-items: flex-end; font-family: 'Tajawal', sans-serif; }
-        #vertebra-chat-window { width: 380px; height: 600px; background: white; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.15); overflow: hidden; display: none; margin-bottom: 15px; border: 1px solid #EAEAEA; transition: all 0.3s ease; }
-        #vertebra-chat-window iframe { width: 100%; height: 100%; border: none; }
-        #vertebra-chat-btn { width: 60px; height: 60px; background: #9B26B6; border-radius: 50%; cursor: pointer; box-shadow: 0 4px 12px rgba(155,38,182,0.3); display: flex; align-items: center; justify-content: center; transition: transform 0.2s; }
-        #vertebra-chat-btn:hover { transform: scale(1.05); }
-        #vertebra-chat-btn svg { width: 30px; height: 30px; fill: white; }
+        #vertebra-chat-window { width: 380px; height: 600px; background: #0f0f11; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); overflow: hidden; display: none; margin-bottom: 15px; border: 1px solid #d4af37; transition: all 0.3s ease; }
+        #vertebra-chat-window iframe { width: 100%; height: 100%; border: none; background: transparent; }
+        #vertebra-chat-btn { width: 60px; height: 60px; background: #d4af37; border-radius: 50%; cursor: pointer; box-shadow: 0 4px 12px rgba(212,175,55,0.4); display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; }
+        #vertebra-chat-btn:hover { transform: scale(1.05); background: #e5c358; }
+        #vertebra-chat-btn img { width: 35px; height: 35px; object-fit: contain; }
     `;
 
     const styleSheet = document.createElement("style");
@@ -25,7 +25,7 @@
         </div>
         <div id="vertebra-chat-btn" onclick="toggleVertebraChat()">
             <!-- اللوغو ديالك -->
-            <img src="${BASE_URL}/static/logo.png" alt="Chat" style="width: 35px; height: 35px; object-fit: contain;">
+            <img src="${BASE_URL}/static/logo.png" alt="Chat">
         </div>
     `;
     document.body.appendChild(widgetContainer);

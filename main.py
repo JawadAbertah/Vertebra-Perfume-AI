@@ -46,7 +46,6 @@ def get_catalog_text():
     except Exception as e:
         return f"حدث خطأ أثناء قراءة الكتالوج: {str(e)}"
 
-# Prompt صارم جداً يفرض إخراج JSON فقط بدون أي نص إضافي
 _SYSTEM_PROMPT = """أنت "نور"، خبيرة مبيعات عطور فاخرة في متجر AAA للعطور الخليجية.
 مهمتك هي تقديم استشارات عطرية، فهم ذوق العميل، وإتمام عملية البيع.
 
@@ -106,7 +105,6 @@ class OrderResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # خفضنا الـ temperature لـ 0.1 لضمان التزام الذكاء الاصطناعي بالأوامر وتفادي الهلوسة
     llm = ChatGoogleGenerativeAI(model=GOOGLE_MODEL, temperature=0.1, google_api_key=GOOGLE_API_KEY)
     app.state.rag_chain = build_rag_chain(llm)
     app.state.mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
@@ -134,15 +132,12 @@ async def chat(request: ChatRequest, app_request: Request):
             config={"configurable": {"session_id": request.session_id}}
         )
         
-        # 1. تنظيف الرد من علامات Markdown لي كيزيدها Gemini
         json_str = raw_reply.replace("```json", "").replace("```", "").strip()
         
-        # 2. استخراج كود الـ JSON فقط في حالة البوت زاد شي نص بالخطأ
         match = re.search(r'(\{.*\})', json_str, re.DOTALL)
         if match:
             json_str = match.group(1)
             
-        # 3. فصل النص عن البيانات بأمان تام
         try:
             bot_data = json.loads(json_str)
             clean_text = bot_data.get("reply", "تم استلام طلبك شكراً لك.")
@@ -150,7 +145,6 @@ async def chat(request: ChatRequest, app_request: Request):
             if not isinstance(order_info, dict):
                 order_info = {}
         except Exception as parse_error:
-            # Fallback قوي: في حالة فشل التحليل، نمسح أي كود برمجي ونعرض النص فقط
             print("JSON Parsing Error:", parse_error)
             clean_text = raw_reply
             clean_text = re.sub(r'\{.*?\}', '', clean_text, flags=re.DOTALL)
